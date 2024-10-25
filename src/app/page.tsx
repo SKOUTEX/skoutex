@@ -22,7 +22,7 @@ export default function HeroPage() {
           <div className="flex flex-col justify-center space-y-8">
             <div className="space-y-4">
               <h1 className="text-3xl font-bold tracking-tighter text-foreground sm:text-4xl md:text-5xl xl:text-[3.4rem] 2xl:text-[3.75rem]">
-                Advanced Player Analysis & Scouting Platform
+                Skoutex - Talk to football information
               </h1>
               <p className="max-w-[600px] text-muted-foreground md:text-xl/relaxed lg:text-base/relaxed xl:text-xl/relaxed">
                 Compare players, discover hidden talents, and make data-driven
