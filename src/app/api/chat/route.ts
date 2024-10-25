@@ -1,5 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-call */
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import {
   type Message,
   type ToolInvocation,
@@ -8,11 +6,67 @@ import {
 } from "ai";
 import { openai } from "@ai-sdk/openai";
 import { z } from "zod";
+import { env } from "~/env";
 
-const SPORTMONK_API_KEY = process.env.SPORTMONK_API_KEY!;
+const SPORTMONK_API_KEY = env.SPORTMONK_API_KEY;
 const BASE_URL = "https://api.sportmonks.com/v3/football";
 
-async function fetchFromSportsmonk(endpoint: string) {
+// API Response Types
+interface PlayerDetails {
+  data: {
+    id: number;
+    display_name: string;
+    height: string;
+    weight: string;
+    position_id: number;
+    detailed_position_id: number;
+    nationality_id: number;
+    country: {
+      name: string;
+      image_path: string;
+    };
+    birthdate: string;
+    age: number;
+    market_value: number;
+    contract_until?: string;
+  };
+}
+
+interface PlayerStatistics {
+  data: {
+    statistics: {
+      // Technical Skills
+      goals: number;
+      assists: number;
+      passes: number;
+      passes_accuracy: number;
+      crosses: number;
+      crosses_accuracy: number;
+      dribbles: number;
+      dribbles_success: number;
+      shots: number;
+      shots_on_target: number;
+      key_passes: number;
+      
+      // Physical Attributes & Performance
+      minutes_played: number;
+      appearances: number;
+      tackles: number;
+      blocks: number;
+      interceptions: number;
+      duels: number;
+      duels_won: number;
+      aerial_duels: number;
+      aerial_duels_won: number;
+      fouls_drawn: number;
+      fouls_committed: number;
+      yellow_cards: number;
+      red_cards: number;
+    };
+  };
+}
+
+async function fetchFromSportsmonk<T>(endpoint: string): Promise<T> {
   const response = await fetch(`${BASE_URL}${endpoint}`, {
     headers: {
       Authorization: `Bearer ${SPORTMONK_API_KEY}`,
@@ -23,47 +77,30 @@ async function fetchFromSportsmonk(endpoint: string) {
     throw new Error("API request failed");
   }
 
-  return response.json();
+  return response.json() as Promise<T>;
+}
+
+function calculatePercentage(value: number, total: number): string {
+  if (total === 0) return "0%";
+  return `${((value / total) * 100).toFixed(1)}%`;
 }
 
 export async function POST(req: Request) {
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
   const { messages }: { messages: Message[] } = await req.json();
 
   const result = await streamText({
     model: openai("gpt-4o"),
-    system:
-      "You are a football analysis assistant that helps users understand player statistics, team performance, and match analysis. Use the provided tools to fetch accurate data.",
+    system: `You are a football analysis assistant specializing in detailed player analysis. 
+    When analyzing players, structure your response in three main sections:
+    1. Technical Skills (passing, dribbling, shooting, etc.)
+    2. Physical Attributes (aerial duels, tackles, stamina indicators)
+    3. Brief Conclusion
+    
+    Provide context for statistics and explain their significance for the player's role.
+    Be concise but thorough in your analysis.`,
     messages: convertToCoreMessages(messages),
     tools: {
-      getPlayerStats: {
-        description: "Get statistics for a specific player",
-        parameters: z.object({
-          playerId: z.number().describe("The ID of the player to look up"),
-          seasonId: z
-            .number()
-            .optional()
-            .describe("Optional season ID to filter stats"),
-        }),
-        execute: async ({ playerId, seasonId }) => {
-          try {
-            const player = await fetchFromSportsmonk(`/players/${playerId}`);
-            const stats = await fetchFromSportsmonk(
-              `/players/${playerId}/statistics/season/${seasonId ?? 21043}`,
-            );
-
-            return `Stats for ${player.data.display_name}:
-              Position: ${player.data.position_id}
-              Goals: ${stats.data.statistics.goals ?? 0}
-              Assists: ${stats.data.statistics.assists ?? 0}
-              Minutes Played: ${stats.data.statistics.minutes_played ?? 0}
-              Matches Played: ${stats.data.statistics.appearances ?? 0}
-              Yellow Cards: ${stats.data.statistics.yellow_cards ?? 0}
-              Red Cards: ${stats.data.statistics.red_cards ?? 0}`;
-          } catch (error) {
-            return "Error fetching player statistics";
-          }
-        },
-      },
       searchPlayer: {
         description: "Search for a player by name to get their ID",
         parameters: z.object({
@@ -71,130 +108,114 @@ export async function POST(req: Request) {
         }),
         execute: async ({ name }) => {
           try {
-            const result = await fetchFromSportsmonk(`/players/search/${name}`);
+            const result = await fetchFromSportsmonk<{
+              data: Array<{
+                id: number;
+                display_name: string;
+                team: { name: string } | null;
+                position_id: number;
+              }>;
+            }>(`/players/search/${name}`);
+            
             if (!result.data.length) {
               return "No players found with that name";
             }
 
-            return result.data.slice(0, 3).map((player: any) => ({
+            return result.data.slice(0, 3).map((player) => ({
               id: player.id,
               name: player.display_name,
               team: player.team?.name ?? "Unknown Team",
+              position: player.position_id,
             }));
           } catch (error) {
             return "Error searching for player";
           }
         },
       },
-      getTeamStats: {
-        description: "Get team statistics",
+      analyzePlayer: {
+        description: "Get detailed analysis of a player",
         parameters: z.object({
-          teamId: z.number().describe("The ID of the team to analyze"),
+          playerId: z.number().describe("The ID of the player to analyze"),
           seasonId: z
             .number()
             .optional()
             .describe("Optional season ID to filter stats"),
         }),
-        execute: async ({ teamId, seasonId }) => {
+        execute: async ({ playerId, seasonId }) => {
           try {
-            const team = await fetchFromSportsmonk(`/teams/${teamId}`);
-            const stats = await fetchFromSportsmonk(
-              `/teams/${teamId}/statistics/season/${seasonId ?? 21043}`,
-            );
+            const [playerDetails, playerStats] = await Promise.all([
+              fetchFromSportsmonk<PlayerDetails>(`/players/${playerId}`),
+              fetchFromSportsmonk<PlayerStatistics>(
+                `/players/${playerId}/statistics/season/${seasonId ?? 21043}`
+              ),
+            ]);
 
-            return `Team Stats for ${team.data.name}:
-              League Position: ${stats.data.statistics.league_position ?? "N/A"}
-              Matches Played: ${stats.data.statistics.matches_played ?? 0}
-              Wins: ${stats.data.statistics.won ?? 0}
-              Draws: ${stats.data.statistics.draw ?? 0}
-              Losses: ${stats.data.statistics.lost ?? 0}
-              Goals Scored: ${stats.data.statistics.goals_scored ?? 0}
-              Goals Conceded: ${stats.data.statistics.goals_against ?? 0}
-              Clean Sheets: ${stats.data.statistics.clean_sheets ?? 0}`;
-          } catch (error) {
-            return "Error fetching team statistics";
-          }
-        },
-      },
-      searchTeam: {
-        description: "Search for a team by name to get their ID",
-        parameters: z.object({
-          name: z.string().describe("The name of the team to search for"),
-        }),
-        execute: async ({ name }) => {
-          try {
-            const result = await fetchFromSportsmonk(`/teams/search/${name}`);
-            if (!result.data.length) {
-              return "No teams found with that name";
-            }
+            const stats = playerStats.data.statistics;
+            const player = playerDetails.data;
 
-            return result.data.slice(0, 3).map((team: any) => ({
-              id: team.id,
-              name: team.name,
-              country: team.country?.name ?? "Unknown Country",
-            }));
+            return {
+              playerInfo: {
+                name: player.display_name,
+                age: player.age,
+                nationality: player.country.name,
+                position: player.position_id,
+                marketValue: player.market_value,
+                contractUntil: player.contract_until,
+                height: player.height,
+                weight: player.weight,
+              },
+              technicalSkills: {
+                scoring: {
+                  goals: stats.goals,
+                  shots: stats.shots,
+                  shotAccuracy: calculatePercentage(stats.shots_on_target, stats.shots),
+                },
+                passing: {
+                  total: stats.passes,
+                  accuracy: `${stats.passes_accuracy}%`,
+                  keyPasses: stats.key_passes,
+                  assists: stats.assists,
+                },
+                dribbling: {
+                  attempts: stats.dribbles,
+                  successRate: calculatePercentage(stats.dribbles_success, stats.dribbles),
+                },
+                crossing: {
+                  attempts: stats.crosses,
+                  accuracy: `${stats.crosses_accuracy}%`,
+                },
+              },
+              physicalAttributes: {
+                durability: {
+                  appearances: stats.appearances,
+                  minutesPlayed: stats.minutes_played,
+                },
+                defensiveWork: {
+                  tackles: stats.tackles,
+                  interceptions: stats.interceptions,
+                  blocks: stats.blocks,
+                },
+                physicalDuels: {
+                  totalDuels: stats.duels,
+                  duelsWonRate: calculatePercentage(stats.duels_won, stats.duels),
+                  aerialDuels: stats.aerial_duels,
+                  aerialDuelsWonRate: calculatePercentage(stats.aerial_duels_won, stats.aerial_duels),
+                },
+                discipline: {
+                  foulsCommitted: stats.fouls_committed,
+                  foulsDrawn: stats.fouls_drawn,
+                  yellowCards: stats.yellow_cards,
+                  redCards: stats.red_cards,
+                },
+              },
+            };
           } catch (error) {
-            return "Error searching for team";
-          }
-        },
-      },
-      getFixtureDetails: {
-        description: "Get detailed information about a specific fixture",
-        parameters: z.object({
-          fixtureId: z.number().describe("The ID of the fixture to analyze"),
-        }),
-        execute: async ({ fixtureId }) => {
-          try {
-            const fixture = await fetchFromSportsmonk(`/fixtures/${fixtureId}`);
-            const stats = fixture.data.statistics;
-
-            return `Match Details:
-              ${fixture.data.participants[0].name} vs ${fixture.data.participants[1].name}
-              Score: ${fixture.data.scores.localteam_score} - ${fixture.data.scores.visitorteam_score}
-              Possession: ${stats?.possession?.localteam ?? 0}% - ${stats?.possession?.visitorteam ?? 0}%
-              Shots on Target: ${stats?.shots_on_target?.localteam ?? 0} - ${stats?.shots_on_target?.visitorteam ?? 0}
-              Yellow Cards: ${stats?.yellow_cards?.localteam ?? 0} - ${stats?.yellow_cards?.visitorteam ?? 0}
-              Red Cards: ${stats?.red_cards?.localteam ?? 0} - ${stats?.red_cards?.visitorteam ?? 0}`;
-          } catch (error) {
-            return "Error fetching fixture details";
-          }
-        },
-      },
-      getUpcomingFixtures: {
-        description: "Get upcoming fixtures for a team",
-        parameters: z.object({
-          teamId: z.number().describe("The ID of the team"),
-          count: z
-            .number()
-            .max(5)
-            .default(3)
-            .describe("Number of upcoming fixtures to fetch"),
-        }),
-        execute: async ({ teamId, count }) => {
-          try {
-            const fixtures = await fetchFromSportsmonk(
-              `/teams/${teamId}/fixtures/upcoming`,
-            );
-
-            return fixtures.data.slice(0, count).map((fixture: any) => ({
-              id: fixture.id,
-              date: fixture.starting_at,
-              home: fixture.participants.find(
-                (p: any) => p.meta.location === "home",
-              )?.name,
-              away: fixture.participants.find(
-                (p: any) => p.meta.location === "away",
-              )?.name,
-              league: fixture.league?.name,
-            }));
-          } catch (error) {
-            return "Error fetching upcoming fixtures";
+            return "Error fetching player analysis";
           }
         },
       },
     },
   });
 
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-return
   return result.toDataStreamResponse();
 }
