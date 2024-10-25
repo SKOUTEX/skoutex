@@ -123,7 +123,7 @@ export async function POST(req: Request) {
   const { messages }: { messages: Message[] } = await req.json();
 
   const result = await streamText({
-    model: openai("gpt-4o"),
+    model: openai("gpt-4o-mini"),
     system: `You are a football analysis assistant specializing in detailed player analysis. 
     When analyzing players, structure your response in three main sections:
     1. Technical Skills (passing, dribbling, shooting, etc.)
