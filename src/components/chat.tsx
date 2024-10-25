@@ -1,3 +1,4 @@
+"use client";
 import { useChat } from "ai/react";
 import React from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "~/components/ui/avatar";
@@ -9,12 +10,13 @@ import { MessageSquare, Loader2, Send } from "lucide-react";
 export function Chat() {
   const { messages, input, setInput, isLoading, append } = useChat({
     api: "/api/chat",
-    // maxSteps: 3,
+    maxSteps: 3,
   });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim() || isLoading) return;
+    setInput("");
     void append({
       content: input,
       role: "user",

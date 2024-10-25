@@ -105,19 +105,10 @@ export default function HeroPage() {
               </div>
             </div>
 
-            <div className="flex flex-col gap-3 sm:flex-row">
-              <Link href="/analysis">
+            <div className="flex w-full justify-center">
+              <Link href="/assistant">
                 <Button size="lg" className="w-full sm:w-auto">
-                  Start Player Analysis
-                </Button>
-              </Link>
-              <Link href="/search">
-                <Button
-                  variant="outline"
-                  size="lg"
-                  className="w-full sm:w-auto"
-                >
-                  Search Players
+                  Start Chat
                 </Button>
               </Link>
             </div>
