@@ -5,13 +5,59 @@ import { Avatar, AvatarFallback, AvatarImage } from "~/components/ui/avatar";
 import { Button } from "~/components/ui/button";
 import { Textarea } from "~/components/ui/textarea";
 import { Card } from "~/components/ui/card";
-import { MessageSquare, Loader2, Send } from "lucide-react";
+import { MessageSquare, Loader2, Send, Search, BarChart2 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
+
+// Component to display tool invocations in a friendly way
+interface ToolArgs {
+  name?: string;
+}
+
+const ToolInvocation = ({
+  tool,
+}: {
+  tool: { toolName: string; args: ToolArgs };
+}) => {
+  const getToolInfo = (toolName: string) => {
+    switch (toolName) {
+      case "searchPlayer":
+        return {
+          icon: <Search className="h-4 w-4" />,
+          message: `Searched for player${
+            tool.args.name ? `: ${tool.args.name}` : ""
+          }`,
+        };
+      case "analyzePlayer":
+        return {
+          icon: <BarChart2 className="h-4 w-4" />,
+          message: `Analyzed player statistics${
+            tool.args.name ? ` for ${tool.args.name}` : ""
+          }`,
+        };
+      default:
+        return {
+          icon: <MessageSquare className="h-4 w-4" />,
+          message: `Used ${toolName}`,
+        };
+    }
+  };
+
+  const { icon, message } = getToolInfo(tool.toolName);
+
+  return (
+    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+      <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10">
+        {icon}
+      </div>
+      <span>{message}</span>
+    </div>
+  );
+};
 
 export function Chat() {
   const { messages, input, setInput, isLoading, append } = useChat({
     api: "/api/chat",
-    maxSteps: 6,
+    maxSteps: 3,
   });
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -54,17 +100,14 @@ export function Chat() {
                   <div className="prose prose-neutral max-w-none dark:prose-invert">
                     <ReactMarkdown>{message.content}</ReactMarkdown>
                   </div>
-                  {message.toolInvocations?.map((tool, index) => (
-                    <Card
-                      key={index}
-                      className="mt-2 bg-muted p-3 text-sm text-muted-foreground"
-                    >
-                      <p className="font-medium">Tool: {tool.toolName}</p>
-                      <pre className="mt-2 overflow-auto">
-                        {JSON.stringify(tool.args, null, 2)}
-                      </pre>
-                    </Card>
-                  ))}
+                  {message.toolInvocations &&
+                    message.toolInvocations.length > 0 && (
+                      <div className="mt-2 flex flex-col gap-2">
+                        {message.toolInvocations.map((tool, index) => (
+                          <ToolInvocation key={index} tool={tool} />
+                        ))}
+                      </div>
+                    )}
                 </div>
               </Card>
             ))}
