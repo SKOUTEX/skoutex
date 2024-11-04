@@ -11,7 +11,7 @@ import ReactMarkdown from "react-markdown";
 export function Chat() {
   const { messages, input, setInput, isLoading, append } = useChat({
     api: "/api/chat",
-    maxSteps: 3,
+    maxSteps: 6,
   });
 
   const handleSubmit = (e: React.FormEvent) => {
