@@ -6,6 +6,7 @@ import { Button } from "~/components/ui/button";
 import { Textarea } from "~/components/ui/textarea";
 import { Card } from "~/components/ui/card";
 import { MessageSquare, Loader2, Send } from "lucide-react";
+import ReactMarkdown from "react-markdown";
 
 export function Chat() {
   const { messages, input, setInput, isLoading, append } = useChat({
@@ -50,8 +51,8 @@ export function Chat() {
                   </AvatarFallback>
                 </Avatar>
                 <div className="flex-1 space-y-2">
-                  <div className="prose prose-neutral dark:prose-invert">
-                    {message.content}
+                  <div className="prose prose-neutral max-w-none dark:prose-invert">
+                    <ReactMarkdown>{message.content}</ReactMarkdown>
                   </div>
                   {message.toolInvocations?.map((tool, index) => (
                     <Card
@@ -70,7 +71,6 @@ export function Chat() {
           </div>
         </div>
       </main>
-
       <footer className="sticky bottom-0 border-t bg-background">
         <form onSubmit={handleSubmit} className="container flex gap-2 p-4">
           <Textarea
