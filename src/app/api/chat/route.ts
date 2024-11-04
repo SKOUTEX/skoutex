@@ -1,155 +1,86 @@
+/* eslint-disable @typescript-eslint/ban-ts-comment */
 import { type Message, convertToCoreMessages, streamText } from "ai";
 import { openai } from "@ai-sdk/openai";
 import { z } from "zod";
+import { type PlayerDetails, type PlayerStatistics, type Season, type StatDetail, TYPE_IDS } from "~/types/players";
 
 const SPORTMONK_API_KEY = process.env.SPORTMONK_API_KEY!;
 const BASE_URL = "https://api.sportmonks.com/v3/football";
 
-const TYPE_IDS = {
-  // Match Participation
-  APPEARANCES: 321,        // Games played
-  LINEUPS: 322,           // Started in lineup
-  BENCH: 323,             // Started on bench
-  MINUTES_PLAYED: 119,    // Minutes played
-  CAPTAIN: 40,            // Times as captain
-  SUBSTITUTIONS: 59,      // Substitutions (in/out)
-
-  // Scoring
-  GOALS: 52,              // Goals scored
-  PENALTIES_SCORED: 111,  // Penalties scored
-  PENALTIES_MISSED: 112,  // Penalties missed
-  OWN_GOALS: 324,        // Own goals
-  HIT_WOODWORK: 64,      // Hit woodwork
-
-  // Shooting
-  SHOTS_TOTAL: 42,        // Total shots
-  SHOTS_ON_TARGET: 86,    // Shots on target
-  SHOTS_OFF_TARGET: 41,   // Shots off target
-  SHOTS_BLOCKED: 58,      // Shots blocked
-
-  // Passing
-  PASSES: 80,             // Total passes
-  ACCURATE_PASSES: 116,   // Accurate passes
-  KEY_PASSES: 117,        // Key passes
-  ASSISTS: 79,            // Assists
-  THROUGH_BALLS: 124,     // Through balls
-  THROUGH_BALLS_WON: 125, // Accurate through balls
-  LONG_BALLS: 122,        // Long balls
-  LONG_BALLS_WON: 123,    // Accurate long balls
-  CROSSES_TOTAL: 98,      // Total crosses
-  CROSSES_ACCURATE: 99,   // Accurate crosses
-
-  // Defending
-  TACKLES: 78,            // Tackles
-  INTERCEPTIONS: 100,     // Interceptions
-  CLEARANCES: 101,        // Clearances
-  BLOCKS: 97,             // Blocked shots
-  ERROR_LEAD_TO_GOAL: 571, // Errors leading to goal
-
-  // Duels
-  TOTAL_DUELS: 105,       // Total duels
-  DUELS_WON: 106,        // Duels won
-  AERIALS_WON: 107,      // Aerial duels won
-  DRIBBLE_ATTEMPTS: 108,  // Dribble attempts
-  SUCCESSFUL_DRIBBLES: 109, // Successful dribbles
-  DRIBBLED_PAST: 110,    // Times dribbled past
-  DISPOSSESSED: 94,      // Times dispossessed
-
-  // Discipline
-  FOULS: 56,             // Fouls committed
-  FOULS_DRAWN: 96,       // Fouls drawn
-  YELLOWCARDS: 84,       // Yellow cards
-  REDCARDS: 83,          // Straight red cards
-  YELLOWRED_CARDS: 85,   // Second yellows
-  OFFSIDES: 51,          // Offsides
-
-  // Goalkeeper specific
-  SAVES: 57,             // Saves
-  SAVES_INSIDEBOX: 104,  // Saves inside box
-  PUNCHES: 103,          // Punches
-  GOALS_CONCEDED: 88,    // Goals conceded
-
-  // Rating
-  RATING: 118            // Match rating
-};
-
-// API Response Types
-interface PlayerDetails {
-  data: {
-    id: number;
-    sport_id: number;
-    country_id: number;
-    nationality_id: number;
-    city_id: number;
-    position_id: number;
-    detailed_position_id: number;
-    type_id: number;
-    common_name: string;
-    firstname: string;
-    lastname: string;
-    name: string;
-    display_name: string;
-    image_path: string;
-    height: number;
-    weight: number;
-    date_of_birth: string;
-    gender: string;
-  };
-}
-
-interface Season {
-  data: {
-    id: number;
-    name: string;
-    is_current: boolean;
-  }[];
-}
-
-interface StatDetail {
-  id: number;
-  player_statistic_id: number;
-  type_id: number;
-  value: {
-    total?: number;
-    goals?: number;
-    penalties?: number;
-    in?: number;
-    out?: number;
-    home?: number;
-    away?: number;
-    average?: string;
-    won?: number;
-    scored?: number;
-    committed?: number;
-    saved?: number;
-    missed?: number;
-  };
-}
-interface PlayerStatistics {
-  data: {
-    id: number;
-    player_id: number;
-    team_id: number;
-    season_id: number;
-    has_values: boolean;
-    position_id: number;
-    jersey_number: number;
-    details: StatDetail[];
-  }[];
-}
-
 function findStatValue(
   details: StatDetail[],
   typeId: number,
-): number | undefined {
+): Record<string, number | undefined> {
   const stat = details.find((detail) => detail.type_id === typeId);
-  if (!stat) return undefined;
+  if (!stat) return {};
 
-  // Handle different value structures
-  if (typeof stat.value === "object") {
-    return stat.value.total ?? stat.value.goals ?? stat.value.won ?? undefined;
+  if (typeof stat.value === "object" && stat.value !== null) {
+    // Return all properties found in the value object
+    return Object.entries(stat.value).reduce((acc, [key, value]) => {
+      if (typeof value === "number") {
+        acc[key] = value;
+      }
+      return acc;
+    }, {} as Record<string, number>);
   }
-  return undefined;
+  
+  // If value is a number, store it as 'total'
+  if (typeof stat.value === "number") {
+    return { total: stat.value };
+  }
+
+  return {};
+}
+
+function mapAllTypeIds(stats: StatDetail[]): Record<number, Record<string, number | undefined>> {
+  const result: Record<number, Record<string, number | undefined>> = {};
+  
+  stats.forEach(stat => {
+    result[stat.type_id] = findStatValue([stat], stat.type_id);
+  });
+
+  return result;
+}
+
+function aggregateHistoricalStats(seasons: Array<{ details: StatDetail[] }>): Record<number, Record<string, number>> {
+  const aggregatedStats: Record<number, Record<string, number>> = {};
+
+  // First, group all stats by type_id
+  seasons.forEach(season => {
+    season.details.forEach(stat => {
+      if (!aggregatedStats[stat.type_id]) {
+        aggregatedStats[stat.type_id] = {};
+      }
+
+      const statValues = findStatValue([stat], stat.type_id);
+      
+      // Aggregate each property
+      Object.entries(statValues).forEach(([key, value]) => {
+        if (value !== undefined) {
+          // @ts-expect-error
+          if (!aggregatedStats[stat.type_id][key]) {
+              // @ts-expect-error
+            aggregatedStats[stat.type_id][key] = 0;
+          }
+          // @ts-expect-error
+          aggregatedStats[stat.type_id][key] += value;
+        }
+      });
+    });
+  });
+
+  // Calculate averages for specific stats that should be averaged instead of summed
+  const averageStats = [TYPE_IDS.RATING]; // Add more type IDs that should be averaged
+  averageStats.forEach(typeId => {
+    if (aggregatedStats[typeId]) {
+      Object.keys(aggregatedStats[typeId]).forEach(key => {
+        // @ts-expect-error
+        aggregatedStats[typeId][key] = Number((aggregatedStats[typeId][key] / seasons.length).toFixed(2));
+      });
+    }
+  });
+
+  return aggregatedStats;
 }
 
 async function fetchFromSportsmonk<T>(endpoint: string): Promise<T> {
@@ -178,22 +109,6 @@ async function fetchFromSportsmonk<T>(endpoint: string): Promise<T> {
   }
 }
 
-async function getCurrentSeason(): Promise<number> {
-  try {
-    const seasons = await fetchFromSportsmonk<Season>("/seasons");
-    const currentSeason = seasons.data.find((season) => season.is_current);
-    return currentSeason?.id ?? 21043; // fallback to a default season if not found
-  } catch (error) {
-    console.error("Error fetching current season", error);
-    return 21043; // fallback to default season
-  }
-}
-
-function calculatePercentage(value?: number, total?: number): string {
-  if (!value || !total || total === 0) return "0%";
-  return `${((value / total) * 100).toFixed(1)}%`;
-}
-
 export async function POST(req: Request) {
   // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
   const { messages }: { messages: Message[] } = await req.json();
@@ -201,10 +116,15 @@ export async function POST(req: Request) {
   const result = await streamText({
     model: openai("gpt-4o-mini"),
     system: `You are a football analysis assistant specializing in detailed player analysis. 
-    When analyzing players, structure your response in three main sections:
-    1. Technical Skills (passing, dribbling, shooting, etc.)
-    2. Physical Attributes (aerial duels, tackles, stamina indicators)
-    3. Brief Conclusion
+    When analyzing players, structure your response focusing on the current season data, and include comparison with the previous season when available.
+    Structure your response in these sections:
+    1. Current Season Performance
+    2. Comparison with Previous Season (if available)
+    3. Technical Skills Analysis
+    4. Physical Attributes Analysis
+    5. Brief Conclusion
+
+    Give details explanations
     
     If you encounter any errors when fetching data, explain clearly what happened and suggest alternatives.
     When data is missing or incomplete, mention this fact and focus on the available statistics.
@@ -212,7 +132,7 @@ export async function POST(req: Request) {
     messages: convertToCoreMessages(messages),
     tools: {
       searchPlayer: {
-        description: "Search for a player by name to get their ID",
+        description: "Search for a player by name to get their ID.",
         parameters: z.object({
           name: z.string().describe("The name of the player to search for"),
         }),
@@ -230,8 +150,7 @@ export async function POST(req: Request) {
             if (!result.data.length) {
               return "No players found with that name. Please try with a different name or spelling.";
             }
-
-            return result.data.slice(0, 3).map((player) => ({
+            return result.data.slice(0, 1).map((player) => ({
               id: player.id,
               name: player.display_name,
               team: player.team?.name ?? "Unknown Team",
@@ -243,14 +162,12 @@ export async function POST(req: Request) {
         },
       },
       analyzePlayer: {
-        description: "Get detailed analysis of a player",
+        description: "Get detailed analysis of a player's current season with previous season comparison.",
         parameters: z.object({
           playerId: z.number().describe("The ID of the player to analyze"),
         }),
         execute: async ({ playerId }) => {
           try {
-            const currentSeasonId = await getCurrentSeason();
-
             const [playerDetails, playerStats] = await Promise.all([
               fetchFromSportsmonk<PlayerDetails>(`/players/${playerId}`),
               fetchFromSportsmonk<PlayerStatistics>(
@@ -259,10 +176,18 @@ export async function POST(req: Request) {
             ]);
 
             const player = playerDetails.data;
-            const stats = playerStats.data[0]?.details || [];
+            
+            // Get current and previous season stats
+            const currentSeasonStats = playerStats.data[0];
+            const previousSeasonStats = playerStats.data[1];
+            
+            if (!currentSeasonStats) {
+              return {
+                error: "No current season statistics available for this player."
+              };
+            }
 
-            return {
-              seasonId: currentSeasonId,
+            const response = {
               playerInfo: {
                 name: player.display_name,
                 commonName: player.common_name,
@@ -274,57 +199,61 @@ export async function POST(req: Request) {
                 weight: player.weight,
                 imagePath: player.image_path,
               },
-              matchParticipation: {
-                appearances: findStatValue(stats, TYPE_IDS.APPEARANCES),
-                lineups: findStatValue(stats, TYPE_IDS.LINEUPS),
-                bench: findStatValue(stats, TYPE_IDS.BENCH),
-                minutesPlayed: findStatValue(stats, TYPE_IDS.MINUTES_PLAYED),
-                substitutions: stats.find(
-                  (s) => s.type_id === TYPE_IDS.SUBSTITUTIONS,
-                )?.value,
+              currentSeason: {
+                season_id: currentSeasonStats.season_id,
+                statistics: mapAllTypeIds(currentSeasonStats.details),
               },
-              attacking: {
-                goals: findStatValue(stats, TYPE_IDS.GOALS),
-                assists: findStatValue(stats, TYPE_IDS.ASSISTS),
-                shots: {
-                  total: findStatValue(stats, TYPE_IDS.SHOTS_TOTAL),
-                  onTarget: findStatValue(stats, TYPE_IDS.SHOTS_ON_TARGET),
-                  offTarget: findStatValue(stats, TYPE_IDS.SHOTS_OFF_TARGET),
-                  blocked: findStatValue(stats, TYPE_IDS.SHOTS_BLOCKED),
-                },
-                penalties: {
-                  scored: findStatValue(stats, TYPE_IDS.PENALTIES_SCORED),
-                  missed: findStatValue(stats, TYPE_IDS.PENALTIES_MISSED),
-                },
-              },
-              passing: {
-                total: findStatValue(stats, TYPE_IDS.PASSES),
-                accurate: findStatValue(stats, TYPE_IDS.ACCURATE_PASSES),
-                keyPasses: findStatValue(stats, TYPE_IDS.KEY_PASSES),
-                crosses: {
-                  total: findStatValue(stats, TYPE_IDS.CROSSES_TOTAL),
-                  accurate: findStatValue(stats, TYPE_IDS.CROSSES_ACCURATE),
-                },
-              },
-              defending: {
-                tackles: findStatValue(stats, TYPE_IDS.TACKLES),
-                interceptions: findStatValue(stats, TYPE_IDS.INTERCEPTIONS),
-                clearances: findStatValue(stats, TYPE_IDS.CLEARANCES),
-                duels: {
-                  total: findStatValue(stats, TYPE_IDS.TOTAL_DUELS),
-                  won: findStatValue(stats, TYPE_IDS.DUELS_WON),
-                },
-              },
-              discipline: {
-                foulsCommitted: findStatValue(stats, TYPE_IDS.FOULS),
-                foulsDrawn: findStatValue(stats, TYPE_IDS.FOULS_DRAWN),
-                yellowCards: findStatValue(stats, TYPE_IDS.YELLOWCARDS),
-                redCards: findStatValue(stats, TYPE_IDS.REDCARDS),
-                secondYellows: findStatValue(stats, TYPE_IDS.YELLOWRED_CARDS),
-              },
-              rating: findStatValue(stats, TYPE_IDS.RATING),
-              rawStats: stats, // Including raw stats for additional processing if needed
+              previousSeason: previousSeasonStats ? {
+                season_id: previousSeasonStats.season_id,
+                statistics: mapAllTypeIds(previousSeasonStats.details),
+              } : null,
+              typeIds: TYPE_IDS,
             };
+
+            return response;
+          } catch (error) {
+            return `Error analyzing player: ${error instanceof Error ? error.message : "Unknown error"}. Please try again later.`;
+          }
+        },
+      },
+      analyzeHistoricalStats: {
+        description: "Get aggregated historical statistics for a player across all seasons",
+        parameters: z.object({
+          playerId: z.number().describe("The ID of the player to analyze"),
+        }),
+        execute: async ({ playerId }) => {
+          try {
+            const [playerDetails, playerStats] = await Promise.all([
+              fetchFromSportsmonk<PlayerDetails>(`/players/${playerId}`),
+              fetchFromSportsmonk<PlayerStatistics>(
+                `/statistics/seasons/players/${playerId}`
+              ),
+            ]);
+
+            const player = playerDetails.data;
+            
+            // Aggregate all seasons' data
+            const historicalStats = aggregateHistoricalStats(playerStats.data);
+            
+            const response = {
+              playerInfo: {
+                name: player.display_name,
+                commonName: player.common_name,
+                dateOfBirth: player.date_of_birth,
+                nationality_id: player.nationality_id,
+                position_id: player.position_id,
+                detailed_position_id: player.detailed_position_id,
+                height: player.height,
+                weight: player.weight,
+                imagePath: player.image_path,
+              },
+              totalSeasons: playerStats.data.length,
+              seasonIds: playerStats.data.map(season => season.season_id),
+              statistics: historicalStats,
+              typeIds: TYPE_IDS,
+            };
+
+            return response;
           } catch (error) {
             return `Error analyzing player: ${error instanceof Error ? error.message : "Unknown error"}. Please try again later.`;
           }
@@ -332,6 +261,7 @@ export async function POST(req: Request) {
       },
     },
   });
+
 
   return result.toDataStreamResponse();
 }

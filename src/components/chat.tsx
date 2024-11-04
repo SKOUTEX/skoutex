@@ -1,12 +1,14 @@
 "use client";
 import { useChat } from "ai/react";
 import React from "react";
-import { Avatar, AvatarFallback, AvatarImage } from "~/components/ui/avatar";
+import { Avatar, AvatarFallback } from "~/components/ui/avatar";
 import { Button } from "~/components/ui/button";
 import { Textarea } from "~/components/ui/textarea";
 import { Card } from "~/components/ui/card";
 import { MessageSquare, Loader2, Send, Search, BarChart2 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
+import { RiRobot2Line } from "react-icons/ri";
+import { BsPerson } from "react-icons/bs";
 
 // Component to display tool invocations in a friendly way
 interface ToolArgs {
@@ -57,7 +59,7 @@ const ToolInvocation = ({
 export function Chat() {
   const { messages, input, setInput, isLoading, append } = useChat({
     api: "/api/chat",
-    maxSteps: 3,
+    maxSteps: 6,
   });
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -84,16 +86,13 @@ export function Chat() {
                     : "bg-background"
                 }`}
               >
-                <Avatar className="h-8 w-8">
-                  <AvatarImage
-                    src={
-                      message.role === "user"
-                        ? "/user-avatar.png"
-                        : "/ai-avatar.png"
-                    }
-                  />
-                  <AvatarFallback>
-                    {message.role === "user" ? "U" : "AI"}
+                <Avatar>
+                  <AvatarFallback className="flex items-center justify-center">
+                    {message.role === "user" ? (
+                      <BsPerson className="h-5 w-5" />
+                    ) : (
+                      <RiRobot2Line className="h-5 w-5" />
+                    )}
                   </AvatarFallback>
                 </Avatar>
                 <div className="flex-1 space-y-2">
