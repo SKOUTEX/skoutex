@@ -2,6 +2,7 @@ import React from "react";
 import { Chat } from "~/components/chat";
 import { Avatar, AvatarFallback, AvatarImage } from "~/components/ui/avatar";
 import Link from "next/link";
+import { ModeToggle } from "~/components/toggle-theme";
 
 export const runtime = "edge";
 export const preferredRegion = "auto";
@@ -25,6 +26,7 @@ export default function Page() {
               </p>
             </h1>
           </div>
+          <ModeToggle />
         </div>
       </header>
 

@@ -9,6 +9,7 @@ import { MessageSquare, Loader2, Send, Search, BarChart2 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { RiRobot2Line } from "react-icons/ri";
 import { BsPerson } from "react-icons/bs";
+import { generateId } from "ai";
 
 // Component to display tool invocations in a friendly way
 interface ToolArgs {
@@ -60,6 +61,13 @@ export function Chat() {
   const { messages, input, setInput, isLoading, append } = useChat({
     api: "/api/chat",
     maxSteps: 6,
+    initialMessages: [
+      {
+        id: generateId(),
+        role: "assistant",
+        content: "Hello! What player would you like to analyze?",
+      },
+    ],
   });
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -119,7 +127,7 @@ export function Chat() {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="Ask about player statistics, team performance, or match analysis..."
-            className="min-h-[48px] w-full resize-none rounded-md"
+            className="min-h-[48px] w-full resize-none rounded-md bg-secondary"
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();

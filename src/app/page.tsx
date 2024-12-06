@@ -13,6 +13,7 @@ import {
   Calendar,
 } from "lucide-react";
 import Link from "next/link";
+import { ModeToggle } from "~/components/toggle-theme";
 
 export default function HeroPage() {
   return (
@@ -20,6 +21,7 @@ export default function HeroPage() {
       <div className="container px-4 md:px-6">
         <div className="grid gap-6 lg:grid-cols-[1fr_600px] lg:gap-12 xl:grid-cols-[1fr_700px]">
           <div className="flex flex-col justify-center space-y-8">
+            <ModeToggle />
             <div className="space-y-4">
               <h1 className="text-3xl font-bold tracking-tighter text-foreground sm:text-4xl md:text-5xl xl:text-[3.4rem] 2xl:text-[3.75rem]">
                 Skoutex - Talk to football information

@@ -2,6 +2,7 @@ import "~/styles/globals.css";
 
 import { type Metadata } from "next";
 import { Inter } from "next/font/google";
+import { ThemeProvider } from "~/components/theme-provider";
 
 export const metadata: Metadata = {
   title: "Skoutex",
@@ -21,7 +22,9 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${inter.className}`}>
       <body>
-        <div className="flex h-screen flex-col bg-background">{children}</div>
+        <ThemeProvider attribute="class" enableSystem disableTransitionOnChange>
+          <div className="flex h-screen flex-col bg-background">{children}</div>
+        </ThemeProvider>
       </body>
     </html>
   );
