@@ -10,10 +10,18 @@ import ReactMarkdown from "react-markdown";
 import { RiRobot2Line } from "react-icons/ri";
 import { BsPerson } from "react-icons/bs";
 import { generateId } from "ai";
+import { PlayerComparison } from "~/components/player-comparison";
 
 // Component to display tool invocations in a friendly way
 interface ToolArgs {
   name?: string;
+  chartData?: {
+    title: string;
+    description: string;
+    data: Array<{ label: string; [key: string]: string | number }>;
+    players: string[];
+    chartType: "radar" | "bar";
+  };
 }
 
 const ToolInvocation = ({
@@ -37,6 +45,19 @@ const ToolInvocation = ({
             tool.args.name ? ` for ${tool.args.name}` : ""
           }`,
         };
+      case "analyzeHistoricalStats":
+        return {
+          icon: <BarChart2 className="h-4 w-4" />,
+          message: `Analyzed player statistics across all seasons`,
+        };
+      case "compareStats":
+        return {
+          icon: <BarChart2 className="h-4 w-4" />,
+          message: "Generated player comparison chart",
+          chart: tool.args.chartData && (
+            <PlayerComparison {...tool.args.chartData} />
+          ),
+        };
       default:
         return {
           icon: <MessageSquare className="h-4 w-4" />,
@@ -45,14 +66,17 @@ const ToolInvocation = ({
     }
   };
 
-  const { icon, message } = getToolInfo(tool.toolName);
+  const { icon, message, chart } = getToolInfo(tool.toolName);
 
   return (
-    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-      <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10">
-        {icon}
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+        <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10">
+          {icon}
+        </div>
+        <span>{message}</span>
       </div>
-      <span>{message}</span>
+      {chart && <div className="mt-4">{chart}</div>}
     </div>
   );
 };

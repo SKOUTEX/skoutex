@@ -3,6 +3,7 @@ import { type Message, convertToCoreMessages, streamText } from "ai";
 import { openai } from "@ai-sdk/openai";
 import { z } from "zod";
 import { type PlayerDetails, type PlayerStatistics, type Season, type StatDetail, TYPE_IDS } from "~/types/players";
+import { ENABLE_MOCKS, mockToolResponses } from "~/config/mocks";
 
 const SPORTMONK_API_KEY = process.env.SPORTMONK_API_KEY!;
 const BASE_URL = "https://api.sportmonks.com/v3/football";
@@ -110,8 +111,7 @@ async function fetchFromSportsmonk<T>(endpoint: string): Promise<T> {
 }
 
 export async function POST(req: Request) {
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-  const { messages }: { messages: Message[] } = await req.json();
+  const { messages } = (await req.json()) as { messages: Message[] };
 
   const result = await streamText({
     model: openai("gpt-4o-mini"),
@@ -136,7 +136,11 @@ export async function POST(req: Request) {
         parameters: z.object({
           name: z.string().describe("The name of the player to search for"),
         }),
-        execute: async ({ name }) => {
+        execute: async ({ name }: { name: string }) => {
+          if (ENABLE_MOCKS) {
+            return mockToolResponses.searchPlayer(name);
+          }
+          
           try {
             const result = await fetchFromSportsmonk<{
               data: Array<{
@@ -166,7 +170,11 @@ export async function POST(req: Request) {
         parameters: z.object({
           playerId: z.number().describe("The ID of the player to analyze"),
         }),
-        execute: async ({ playerId }) => {
+        execute: async ({ playerId }: { playerId: number }) => {
+          if (ENABLE_MOCKS) {
+            return mockToolResponses.analyzePlayer(playerId);
+          }
+
           try {
             const [playerDetails, playerStats] = await Promise.all([
               fetchFromSportsmonk<PlayerDetails>(`/players/${playerId}`),
@@ -221,7 +229,12 @@ export async function POST(req: Request) {
         parameters: z.object({
           playerId: z.number().describe("The ID of the player to analyze"),
         }),
-        execute: async ({ playerId }) => {
+        execute: async ({ playerId }: { playerId: number }) => {
+          if (ENABLE_MOCKS) {
+            const mockResponse = mockToolResponses.analyzeHistoricalStats(playerId);
+            return mockResponse;
+          }
+
           try {
             const [playerDetails, playerStats] = await Promise.all([
               fetchFromSportsmonk<PlayerDetails>(`/players/${playerId}`),
@@ -259,9 +272,73 @@ export async function POST(req: Request) {
           }
         },
       },
+      compareStats: {
+        description: "Compare statistics between two or more players using charts",
+        parameters: z.object({
+          playerIds: z.array(z.number()).describe("Array of player IDs to compare"),
+          chartType: z.enum(["radar", "bar"]).describe("Type of chart to generate"),
+          statCategories: z.array(z.number()).describe("Array of TYPE_IDS to compare"),
+        }),
+        execute: async ({ playerIds, chartType, statCategories }: { 
+          playerIds: number[]; 
+          chartType: "radar" | "bar"; 
+          statCategories: number[]; 
+        }) => {
+          if (ENABLE_MOCKS) {
+            const mockResponse = mockToolResponses.compareStats({ playerIds, chartType });
+            return mockResponse;
+          }
+
+          try {
+            type PlayerData = {
+              details: PlayerDetails["data"];
+              stats: PlayerStatistics["data"][0];
+            };
+
+            const playersData: PlayerData[] = await Promise.all(
+              playerIds.map(async (id: number) => {
+                const [details, stats] = await Promise.all([
+                  fetchFromSportsmonk<PlayerDetails>(`/players/${id}`),
+                  fetchFromSportsmonk<PlayerStatistics>(`/statistics/seasons/players/${id}`),
+                ]);
+                
+                if (!stats.data[0]) {
+                  throw new Error(`No statistics found for player ${details.data.display_name}`);
+                }
+                
+                return { details: details.data, stats: stats.data[0] };
+              })
+            );
+
+            const chartData = statCategories.map((typeId: number) => {
+              const dataPoint: { label: string; [key: string]: string | number } = {
+                label: Object.entries(TYPE_IDS).find(([_, id]) => id === typeId)?.[0]?.toLowerCase() ?? String(typeId),
+              };
+
+              playersData.forEach((player: PlayerData) => {
+                const statValue = findStatValue(player.stats.details, typeId);
+                dataPoint[player.details.display_name] = statValue.total ?? 0;
+              });
+
+              return dataPoint;
+            });
+
+            return {
+              chartData: {
+                title: "Player Statistics Comparison",
+                description: "Comparing current season statistics",
+                data: chartData,
+                players: playersData.map((p: PlayerData) => p.details.display_name),
+                chartType,
+              },
+            };
+          } catch (error) {
+            return `Error comparing players: ${error instanceof Error ? error.message : "Unknown error"}. Please try again later.`;
+          }
+        },
+      },
     },
   });
-
 
   return result.toDataStreamResponse();
 }
