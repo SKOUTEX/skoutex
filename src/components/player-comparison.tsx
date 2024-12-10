@@ -50,6 +50,7 @@ export function PlayerComparison({
     };
     return acc;
   }, {} as ChartConfig);
+  console.log("renderizei");
 
   return (
     <Card className="w-full">

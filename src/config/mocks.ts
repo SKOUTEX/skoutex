@@ -224,6 +224,7 @@ export const mockToolResponses = {
 
       return dataPoint;
     });
+    console.log('chart data', chartData);
 
     return {
       chartData: {
