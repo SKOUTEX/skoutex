@@ -130,6 +130,7 @@ export async function POST(req: Request) {
     When data is missing or incomplete, mention this fact and focus on the available statistics.
     Always mention which season the data is from when presenting statistics.`,
     messages: convertToCoreMessages(messages),
+    maxSteps: 6,
     tools: {
       searchPlayer: {
         description: "Search for a player by name to get their ID.",
@@ -286,6 +287,7 @@ export async function POST(req: Request) {
         }) => {
           if (ENABLE_MOCKS) {
             const mockResponse = mockToolResponses.compareStats({ playerIds, chartType });
+            console.log("mock response", mockResponse);
             return mockResponse;
           }
 

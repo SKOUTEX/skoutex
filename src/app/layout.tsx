@@ -20,7 +20,7 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" className={`${inter.className}`}>
+    <html lang="en" className={inter.className}>
       <body>
         <ThemeProvider attribute="class" enableSystem disableTransitionOnChange>
           <div className="flex h-screen flex-col bg-background">{children}</div>

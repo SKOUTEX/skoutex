@@ -9,27 +9,22 @@ import { MessageSquare, Loader2, Send, Search, BarChart2 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { RiRobot2Line } from "react-icons/ri";
 import { BsPerson } from "react-icons/bs";
-import { generateId } from "ai";
+import { generateId, type ToolInvocation } from "ai";
 import { PlayerComparison } from "~/components/player-comparison";
 
 // Component to display tool invocations in a friendly way
-interface ToolArgs {
-  name?: string;
-  chartData?: {
-    title: string;
-    description: string;
-    data: Array<{ label: string; [key: string]: string | number }>;
-    players: string[];
-    chartType: "radar" | "bar";
-  };
-}
 
-const ToolInvocation = ({
-  tool,
-}: {
-  tool: { toolName: string; args: ToolArgs };
-}) => {
+const ToolInvocationComponent = ({ tool }: { tool: ToolInvocation }) => {
   const getToolInfo = (toolName: string) => {
+    // console.log("tool", tool);
+    // console.log("tool name", toolName);
+    // console.log("tool args", tool.args);
+    if (tool.state === "result") {
+      console.log("tool name", toolName);
+      console.log("tool result", tool.result);
+      console.log("tool args", tool.args);
+      console.log("tool result chart data", tool.result?.chartData);
+    }
     switch (toolName) {
       case "searchPlayer":
         return {
@@ -54,8 +49,8 @@ const ToolInvocation = ({
         return {
           icon: <BarChart2 className="h-4 w-4" />,
           message: "Generated player comparison chart",
-          chart: tool.args.chartData && (
-            <PlayerComparison {...tool.args.chartData} />
+          chart: tool.state === "result" && tool.result?.chartData && (
+            <PlayerComparison {...tool.result.chartData} />
           ),
         };
       default:
@@ -77,6 +72,7 @@ const ToolInvocation = ({
         <span>{message}</span>
       </div>
       {chart && <div className="mt-4">{chart}</div>}
+      <h1>teste</h1>
     </div>
   );
 };
@@ -84,7 +80,6 @@ const ToolInvocation = ({
 export function Chat() {
   const { messages, input, setInput, isLoading, append } = useChat({
     api: "/api/chat",
-    maxSteps: 6,
     initialMessages: [
       {
         id: generateId(),
@@ -92,6 +87,7 @@ export function Chat() {
         content: "Hello! What player would you like to analyze?",
       },
     ],
+    async onToolCall({ toolCall }) {},
   });
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -127,7 +123,7 @@ export function Chat() {
                     )}
                   </AvatarFallback>
                 </Avatar>
-                <div className="flex-1 space-y-2">
+                <div className="flex flex-1 space-y-2 self-center">
                   <div className="prose prose-neutral max-w-none dark:prose-invert">
                     <ReactMarkdown>{message.content}</ReactMarkdown>
                   </div>
@@ -135,7 +131,7 @@ export function Chat() {
                     message.toolInvocations.length > 0 && (
                       <div className="mt-2 flex flex-col gap-2">
                         {message.toolInvocations.map((tool, index) => (
-                          <ToolInvocation key={index} tool={tool} />
+                          <ToolInvocationComponent key={index} tool={tool} />
                         ))}
                       </div>
                     )}
