@@ -11,6 +11,7 @@ import { RiRobot2Line } from "react-icons/ri";
 import { BsPerson } from "react-icons/bs";
 import { generateId, type ToolInvocation } from "ai";
 import { PlayerComparison } from "~/components/player-comparison";
+import remarkGfm from "remark-gfm";
 
 // Component to display tool invocations in a friendly way
 
@@ -68,7 +69,6 @@ const ToolInvocationComponent = ({ tool }: { tool: ToolInvocation }) => {
         <span>{message}</span>
       </div>
       {chart && <div className="mt-4">{chart}</div>}
-      <h1>teste</h1>
     </div>
   );
 };
@@ -120,7 +120,9 @@ export function Chat() {
                 </Avatar>
                 <div className="flex flex-1 space-y-2 self-center">
                   <div className="prose prose-neutral max-w-none dark:prose-invert">
-                    <ReactMarkdown>{message.content}</ReactMarkdown>
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                      {message.content}
+                    </ReactMarkdown>
                   </div>
                   {message.toolInvocations &&
                     message.toolInvocations.length > 0 && (

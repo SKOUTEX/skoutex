@@ -287,7 +287,6 @@ export async function POST(req: Request) {
         }) => {
           if (ENABLE_MOCKS) {
             const mockResponse = mockToolResponses.compareStats({ playerIds, chartType });
-            console.log("mock response", mockResponse);
             return mockResponse;
           }
 
