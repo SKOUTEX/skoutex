@@ -1,6 +1,7 @@
 "use client";
 import { useChat } from "ai/react";
 import React from "react";
+import { useSearchParams } from "next/navigation";
 import { Avatar, AvatarFallback } from "~/components/ui/avatar";
 import { Button } from "~/components/ui/button";
 import { Textarea } from "~/components/ui/textarea";
@@ -74,15 +75,43 @@ const ToolInvocationComponent = ({ tool }: { tool: ToolInvocation }) => {
 };
 
 export function Chat() {
+  const searchParams = useSearchParams();
+  const mode = searchParams.get("mode");
+
+  const getInitialMessage = () => {
+    switch (mode) {
+      case "search":
+        return "Which player would you like to search for?";
+      case "compare":
+        return "Which players would you like to compare? You can mention 2-3 players to analyze their statistics.";
+      default:
+        return "Hello! What player would you like to analyze?";
+    }
+  };
+
+  const getPlaceholder = () => {
+    switch (mode) {
+      case "search":
+        return "Enter a player name to search...";
+      case "compare":
+        return "Enter player names to compare (e.g., 'Compare Messi and Ronaldo')...";
+      default:
+        return "Ask about player statistics, team performance, or match analysis...";
+    }
+  };
+
   const { messages, input, setInput, isLoading, append } = useChat({
     api: "/api/chat",
     initialMessages: [
       {
         id: generateId(),
         role: "assistant",
-        content: "Hello! What player would you like to analyze?",
+        content: getInitialMessage(),
       },
     ],
+    body: {
+      mode: mode || "default",
+    },
   });
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -143,7 +172,7 @@ export function Chat() {
           <Textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Ask about player statistics, team performance, or match analysis..."
+            placeholder={getPlaceholder()}
             className="min-h-[48px] w-full resize-none rounded-md bg-secondary"
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {

@@ -111,24 +111,57 @@ async function fetchFromSportsmonk<T>(endpoint: string): Promise<T> {
 }
 
 export async function POST(req: Request) {
-  const { messages } = (await req.json()) as { messages: Message[] };
+  const { messages, mode } = (await req.json()) as { messages: Message[]; mode?: string };
+
+  const getSystemPrompt = (mode?: string) => {
+    const basePrompt = `You are a football analysis assistant specializing in detailed player analysis.`;
+    
+    switch (mode) {
+      case "search":
+        return `${basePrompt}
+        Focus on providing detailed information about specific players.
+        When a user searches for a player:
+        1. Search for the player by name
+        2. Present basic information (team, position, nationality)
+        3. Offer to provide more detailed analysis if requested
+        
+        If multiple players match the search, help the user identify the correct one.
+        Always mention if data is missing or incomplete.`;
+        
+      case "compare":
+        return `${basePrompt}
+        Specialize in comparing multiple players' statistics and performance.
+        When comparing players:
+        1. Search for all mentioned players
+        2. Compare their current season statistics
+        3. Analyze their strengths and weaknesses
+        4. Provide visual comparisons using charts when relevant
+        5. Draw meaningful conclusions from the comparison
+        
+        Focus on comparing similar positions and relevant statistics.
+        Always mention which season the data is from and any missing information.`;
+        
+      default:
+        return `${basePrompt}
+        When analyzing players, structure your response focusing on the current season data, and include comparison with the previous season when available.
+        Structure your response in these sections:
+        1. Current Season Performance
+        2. Comparison with Previous Season (if available)
+        3. Technical Skills Analysis
+        4. Physical Attributes Analysis
+        5. Brief Conclusion
+
+        Give detailed explanations
+        
+        If you encounter any errors when fetching data, explain clearly what happened and suggest alternatives.
+        When data is missing or incomplete, mention this fact and focus on the available statistics.
+        Always mention which season the data is from when presenting statistics.`;
+    }
+  };
 
   const result = await streamText({
     model: openai("gpt-4o-mini"),
-    system: `You are a football analysis assistant specializing in detailed player analysis. 
-    When analyzing players, structure your response focusing on the current season data, and include comparison with the previous season when available.
-    Structure your response in these sections:
-    1. Current Season Performance
-    2. Comparison with Previous Season (if available)
-    3. Technical Skills Analysis
-    4. Physical Attributes Analysis
-    5. Brief Conclusion
-
-    Give details explanations
-    
-    If you encounter any errors when fetching data, explain clearly what happened and suggest alternatives.
-    When data is missing or incomplete, mention this fact and focus on the available statistics.
-    Always mention which season the data is from when presenting statistics.`,
+    system: getSystemPrompt(mode),
     messages: convertToCoreMessages(messages),
     maxSteps: 6,
     tools: {
