@@ -16,20 +16,12 @@ import { PlayerComparison } from "~/components/player-comparison";
 
 const ToolInvocationComponent = ({ tool }: { tool: ToolInvocation }) => {
   const getToolInfo = (toolName: string) => {
-    // console.log("tool", tool);
-    // console.log("tool name", toolName);
-    // console.log("tool args", tool.args);
-    if (tool.state === "result") {
-      console.log("tool name", toolName);
-      console.log("tool result", tool.result);
-      console.log("tool args", tool.args);
-      console.log("tool result chart data", tool.result?.chartData);
-    }
     switch (toolName) {
       case "searchPlayer":
         return {
           icon: <Search className="h-4 w-4" />,
           message: `Searched for player${
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
             tool.args.name ? `: ${tool.args.name}` : ""
           }`,
         };
@@ -37,6 +29,7 @@ const ToolInvocationComponent = ({ tool }: { tool: ToolInvocation }) => {
         return {
           icon: <BarChart2 className="h-4 w-4" />,
           message: `Analyzed player statistics${
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
             tool.args.name ? ` for ${tool.args.name}` : ""
           }`,
         };
@@ -49,9 +42,12 @@ const ToolInvocationComponent = ({ tool }: { tool: ToolInvocation }) => {
         return {
           icon: <BarChart2 className="h-4 w-4" />,
           message: "Generated player comparison chart",
-          chart: tool.state === "result" && tool.result?.chartData && (
-            <PlayerComparison {...tool.result.chartData} />
-          ),
+          chart:
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+            tool.state === "result" && tool.result?.chartData ? (
+              // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+              <PlayerComparison {...tool.result.chartData} />
+            ) : null,
         };
       default:
         return {
@@ -87,7 +83,6 @@ export function Chat() {
         content: "Hello! What player would you like to analyze?",
       },
     ],
-    async onToolCall({ toolCall }) {},
   });
 
   const handleSubmit = (e: React.FormEvent) => {
