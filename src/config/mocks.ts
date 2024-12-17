@@ -2,8 +2,7 @@ import { type PlayerDetails, type PlayerStatistics, type StatDetail } from "~/ty
 import { TYPE_IDS } from "~/types/players";
 
 // Configuration flag to enable/disable mocking
-export const ENABLE_MOCKS = process.env.NEXT_PUBLIC_ENABLE_MOCKS ? process.env.NEXT_PUBLIC_ENABLE_MOCKS === "true" : true;
-
+export const ENABLE_MOCKS = process.env.NEXT_PUBLIC_ENABLE_MOCKS ? process.env.NEXT_PUBLIC_ENABLE_MOCKS === "false" : false;
 // Mock player data
 const MOCK_PLAYERS: PlayerDetails["data"][] = [
   {
