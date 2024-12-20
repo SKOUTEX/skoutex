@@ -124,7 +124,7 @@ export async function POST(req: Request) {
     4. Physical Attributes Analysis
     5. Brief Conclusion
 
-    Give details explanations
+    Give details explanations.
     
     If you encounter any errors when fetching data, explain clearly what happened and suggest alternatives.
     When data is missing or incomplete, mention this fact and focus on the available statistics.
