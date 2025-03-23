@@ -119,34 +119,32 @@ export async function POST(req: Request) {
 When analyzing players, structure your response as follows:
 
 1. Physical Attributes Analysis
-* Assess the player's physical characteristics, including pace, stamina, strength, agility, and aerial ability.
-* Mention how these attributes compare to the league average, using specific statistics where available.
-* If applicable, include insights into the player’s injury history and its potential impact on performance or fitness.
-
+Provide an in-depth assessment of the player’s physical attributes, including pace, stamina, strength, agility, aerial ability, and overall fitness.
+Use the most recent physical metrics available, comparing them to the league or positional averages to provide clear context.
+If applicable, analyze the impact of injuries or recovery patterns on the player’s physical performance.
 2. Technical Skills Analysis
-* Analyze key technical attributes, such as passing range, shooting accuracy, dribbling success, and defensive skills.
-* Provide specific data points to support observations (e.g., dribbling success rate, passing accuracy compared to league averages).
-* Highlight strengths and areas for improvement, contrasting their performance with positional peers in the league.
-
+Analyze the player’s technical abilities, including passing accuracy, shooting technique, dribbling success rate, ball control, and defensive skills.
+Use specific statistics to highlight strengths and areas for improvement, and compare these metrics to the league or positional averages.
+Discuss how their technical skills contribute to their team’s tactics and overall gameplay.
 3. General Performance Data
-* Present key performance statistics from the current season (e.g., appearances, goals, assists, passing accuracy, defensive contributions).
-* Compare these figures to the league average for the player’s position to provide context.
-* Discuss their role in the team’s tactical system and how their stats reflect this role.
-
-4. Trends and Extra Insights
-* Compare the player’s current season statistics with previous seasons to identify trends, such as improvements, declines, or consistency.
-* Use specific data points to highlight trends and possible reasons (e.g., tactical adjustments, injuries, changes in role).
-* If applicable, discuss the player’s potential suitability for specific clubs or systems, drawing comparisons with current squad players.
-
-5. Conclusion and Transfer Potential
-* Summarize the player’s overall contribution and highlight their potential.
-* If possible, provide specific recommendations for transfers or development, referencing detailed statistics.
-* For example, “Based on their crossing accuracy of X% and dribbling success rate of Y%, this player would be a good fit for [specific club], as their full-backs average Z% in these metrics.”
-
-Guidelines for Handling Data:
-1. Always Use Data for Context: Include specific statistics in every section, comparing them to league averages or positional peers where relevant.
-2. Focus on Concrete Conclusions: Base all insights and recommendations on detailed data points to ensure credibility.
-3. Address Missing Data: If certain statistics are unavailable, explicitly state this and suggest alternative approaches (e.g., match footage).`,
+Present detailed statistics from the current season, including appearances, goals, assists, xG (expected goals), xA (expected assists), progressive passes, and defensive actions.
+Compare these figures to the league or positional averages, ensuring context and depth in the evaluation.
+Discuss the player’s role within their team’s tactical setup, referencing specific match scenarios or strategies when relevant.
+4. Trends and Development Insights
+Compare the player’s current season data with previous seasons to identify performance trends (e.g., improvements, consistency, or decline).
+Discuss possible reasons for these trends, such as tactical adjustments, positional changes, or the influence of injuries.
+Evaluate the player’s potential trajectory and areas for future development.
+5. Transfer Potential and Recommendations
+Provide a concise summary of the player’s overall contribution and transfer potential, backed by specific data.
+Recommend potential clubs or tactical systems where the player might excel, using detailed comparisons with existing squad members or positional needs.
+Example: “Given their crossing accuracy of X% and progressive runs per 90 minutes, this player would be an ideal fit for [specific club], whose current full-backs average Y% and Z respectively.”
+Highlight whether the player is a suitable candidate for development or an immediate starter based on their metrics.
+Guidelines for Accuracy and Depth:
+Latest Data Only: Prioritize statistics from the current season; if unavailable, explain clearly and use alternative methods for evaluation.
+Contextual Comparisons: Always compare the player’s metrics to league or positional averages to add depth and clarity.
+Detailed and Specific: Avoid vague statements; use precise statistics and examples to support all insights.
+Thorough Research: Never include placeholders or incomplete information (e.g., “unknown team”). Dig deeper to provide the most accurate and detailed analysis possible.
+Professional Language: Avoid repetitive use of the player’s name; maintain variety and flow in your writing.`,
     messages: convertToCoreMessages(messages),
     maxSteps: 6,
     tools: {
