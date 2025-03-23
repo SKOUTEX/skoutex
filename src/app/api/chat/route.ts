@@ -5,8 +5,9 @@ import { z } from "zod";
 import { type PlayerDetails, type PlayerStatistics, type Season, type StatDetail, TYPE_IDS } from "~/types/players";
 import { ENABLE_MOCKS, mockToolResponses } from "~/config/mocks";
 
-const SPORTMONK_API_KEY = process.env.SPORTMONK_API_KEY!;
-const BASE_URL = "https://api.sportmonks.com/v3/football";
+// Use Besoccer credentials and endpoint
+const BESOCCER_API_KEY = process.env.BESOCCER_API_KEY!;
+const BASE_URL = "https://api.besoccer.com/v1"; // adjust if needed
 
 function findStatValue(
   details: StatDetail[],
@@ -60,7 +61,7 @@ function aggregateHistoricalStats(seasons: Array<{ details: StatDetail[] }>): Re
         if (value !== undefined) {
           // @ts-expect-error
           if (!aggregatedStats[stat.type_id][key]) {
-              // @ts-expect-error
+            // @ts-expect-error
             aggregatedStats[stat.type_id][key] = 0;
           }
           // @ts-expect-error
@@ -71,12 +72,12 @@ function aggregateHistoricalStats(seasons: Array<{ details: StatDetail[] }>): Re
   });
 
   // Calculate averages for specific stats that should be averaged instead of summed
-  const averageStats = [TYPE_IDS.RATING]; // Add more type IDs that should be averaged
+  const averageStats = [TYPE_IDS.RATING]; // Add more type IDs that should be averaged if needed
   averageStats.forEach(typeId => {
     if (aggregatedStats[typeId]) {
       Object.keys(aggregatedStats[typeId]).forEach(key => {
         // @ts-expect-error
-        aggregatedStats[typeId][key] = Number((aggregatedStats[typeId][key] / seasons.length).toFixed(2));
+        aggregatedStats[stat.type_id][key] = Number((aggregatedStats[typeId][key] / seasons.length).toFixed(2));
       });
     }
   });
@@ -84,34 +85,28 @@ function aggregateHistoricalStats(seasons: Array<{ details: StatDetail[] }>): Re
   return aggregatedStats;
 }
 
-async function fetchFromSportsmonk<T>(endpoint: string): Promise<T> {
+async function fetchFromBesoccer<T>(endpoint: string): Promise<T> {
   try {
-    const response = await fetch(`${BASE_URL}${endpoint}`, {
-      headers: {
-        Authorization: `${SPORTMONK_API_KEY}`,
-      },
-    });
-
+    // Append the API key as a query parameter
+    const separator = endpoint.includes('?') ? '&' : '?';
+    const url = `${BASE_URL}${endpoint}${separator}key=${BESOCCER_API_KEY}`;
+    const response = await fetch(url);
     if (!response.ok) {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       const errorData = await response.json().catch(() => ({}));
       throw new Error(
-        `API request failed: ${response.status} ${response.statusText}. ${
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-          errorData.message ?? ""
-        }`,
+        `API request failed: ${response.status} ${response.statusText}. ${errorData.message ?? ""}`
       );
     }
-
     return response.json() as Promise<T>;
   } catch (error) {
-    console.error(`Error fetching from Sportmonk: ${endpoint}`, error);
+    console.error(`Error fetching from Besoccer: ${endpoint}`, error);
     throw error;
   }
 }
 
 export async function POST(req: Request) {
   const { messages } = (await req.json()) as { messages: Message[] };
+  const currentYear = new Date().getFullYear();
 
   const result = await streamText({
     model: openai("gpt-4o"),
@@ -160,14 +155,14 @@ Professional Language: Avoid repetitive use of the player’s name; maintain var
           }
           
           try {
-            const result = await fetchFromSportsmonk<{
+            const result = await fetchFromBesoccer<{
               data: Array<{
                 id: number;
                 display_name: string;
-                team: { name: string } | null;
+                team?: { name: string } | null;
                 position_id: number;
               }>;
-            }>(`/players/search/${name}`);
+            }>(`/?req=search&term=${name}&group=players`);
 
             if (!result.data.length) {
               return "No players found with that name. Please try with a different name or spelling.";
@@ -194,20 +189,15 @@ Professional Language: Avoid repetitive use of the player’s name; maintain var
           }
 
           try {
-            const [playerDetails, playerStats] = await Promise.all([
-              fetchFromSportsmonk<PlayerDetails>(`/players/${playerId}`),
-              fetchFromSportsmonk<PlayerStatistics>(
-                `/statistics/seasons/players/${playerId}`
-              ),
+            // Fetch player details and season stats for current and previous seasons
+            const [playerDetails, currentSeasonStats, previousSeasonStats] = await Promise.all([
+              fetchFromBesoccer<PlayerDetails>(`/?req=player&id=${playerId}`),
+              fetchFromBesoccer<PlayerStatistics>(`/?req=player&id=${playerId}&year=${currentYear}`),
+              fetchFromBesoccer<PlayerStatistics>(`/?req=player&id=${playerId}&year=${currentYear - 1}`),
             ]);
 
-            const player = playerDetails.data;
-            
-            // Get current and previous season stats
-            const currentSeasonStats = playerStats.data[0];
-            const previousSeasonStats = playerStats.data[1];
-            
-            if (!currentSeasonStats) {
+            // Check if current season stats exist
+            if (!currentSeasonStats.data) {
               return {
                 error: "No current season statistics available for this player."
               };
@@ -215,23 +205,23 @@ Professional Language: Avoid repetitive use of the player’s name; maintain var
 
             const response = {
               playerInfo: {
-                name: player.display_name,
-                commonName: player.common_name,
-                dateOfBirth: player.date_of_birth,
-                nationality_id: player.nationality_id,
-                position_id: player.position_id,
-                detailed_position_id: player.detailed_position_id,
-                height: player.height,
-                weight: player.weight,
-                imagePath: player.image_path,
+                name: playerDetails.data.display_name,
+                commonName: playerDetails.data.common_name,
+                dateOfBirth: playerDetails.data.date_of_birth,
+                nationality_id: playerDetails.data.nationality_id,
+                position_id: playerDetails.data.position_id,
+                detailed_position_id: playerDetails.data.detailed_position_id,
+                height: playerDetails.data.height,
+                weight: playerDetails.data.weight,
+                imagePath: playerDetails.data.image_path,
               },
               currentSeason: {
-                season_id: currentSeasonStats.season_id,
-                statistics: mapAllTypeIds(currentSeasonStats.details),
+                season_id: currentYear,
+                statistics: mapAllTypeIds(currentSeasonStats.data.details),
               },
-              previousSeason: previousSeasonStats ? {
-                season_id: previousSeasonStats.season_id,
-                statistics: mapAllTypeIds(previousSeasonStats.details),
+              previousSeason: previousSeasonStats.data ? {
+                season_id: currentYear - 1,
+                statistics: mapAllTypeIds(previousSeasonStats.data.details),
               } : null,
               typeIds: TYPE_IDS,
             };
@@ -254,32 +244,33 @@ Professional Language: Avoid repetitive use of the player’s name; maintain var
           }
 
           try {
-            const [playerDetails, playerStats] = await Promise.all([
-              fetchFromSportsmonk<PlayerDetails>(`/players/${playerId}`),
-              fetchFromSportsmonk<PlayerStatistics>(
-                `/statistics/seasons/players/${playerId}`
-              ),
+            // Fetch player details and stats for current and previous seasons for aggregation
+            const [playerDetails, currentSeasonStats, previousSeasonStats] = await Promise.all([
+              fetchFromBesoccer<PlayerDetails>(`/?req=player&id=${playerId}`),
+              fetchFromBesoccer<PlayerStatistics>(`/?req=player&id=${playerId}&year=${currentYear}`),
+              fetchFromBesoccer<PlayerStatistics>(`/?req=player&id=${playerId}&year=${currentYear - 1}`),
             ]);
 
-            const player = playerDetails.data;
-            
-            // Aggregate all seasons' data
-            const historicalStats = aggregateHistoricalStats(playerStats.data);
+            // Prepare seasons data array (filter out any missing season data)
+            const seasonsData = [currentSeasonStats.data, previousSeasonStats.data].filter(Boolean) as Array<{ details: StatDetail[] }>;
+
+            // Aggregate historical stats
+            const historicalStats = aggregateHistoricalStats(seasonsData);
             
             const response = {
               playerInfo: {
-                name: player.display_name,
-                commonName: player.common_name,
-                dateOfBirth: player.date_of_birth,
-                nationality_id: player.nationality_id,
-                position_id: player.position_id,
-                detailed_position_id: player.detailed_position_id,
-                height: player.height,
-                weight: player.weight,
-                imagePath: player.image_path,
+                name: playerDetails.data.display_name,
+                commonName: playerDetails.data.common_name,
+                dateOfBirth: playerDetails.data.date_of_birth,
+                nationality_id: playerDetails.data.nationality_id,
+                position_id: playerDetails.data.position_id,
+                detailed_position_id: playerDetails.data.detailed_position_id,
+                height: playerDetails.data.height,
+                weight: playerDetails.data.weight,
+                imagePath: playerDetails.data.image_path,
               },
-              totalSeasons: playerStats.data.length,
-              seasonIds: playerStats.data.map(season => season.season_id),
+              totalSeasons: seasonsData.length,
+              seasonIds: seasonsData.map((_, index) => index === 0 ? currentYear : currentYear - 1),
               statistics: historicalStats,
               typeIds: TYPE_IDS,
             };
@@ -310,21 +301,22 @@ Professional Language: Avoid repetitive use of the player’s name; maintain var
           try {
             type PlayerData = {
               details: PlayerDetails["data"];
-              stats: PlayerStatistics["data"][0];
+              stats: PlayerStatistics["data"];
             };
 
+            // Use current season for comparison
             const playersData: PlayerData[] = await Promise.all(
               playerIds.map(async (id: number) => {
                 const [details, stats] = await Promise.all([
-                  fetchFromSportsmonk<PlayerDetails>(`/players/${id}`),
-                  fetchFromSportsmonk<PlayerStatistics>(`/statistics/seasons/players/${id}`),
+                  fetchFromBesoccer<PlayerDetails>(`/?req=player&id=${id}`),
+                  fetchFromBesoccer<PlayerStatistics>(`/?req=player&id=${id}&year=${currentYear}`),
                 ]);
                 
-                if (!stats.data[0]) {
+                if (!stats.data) {
                   throw new Error(`No statistics found for player ${details.data.display_name}`);
                 }
                 
-                return { details: details.data, stats: stats.data[0] };
+                return { details: details.data, stats: stats.data };
               })
             );
 
