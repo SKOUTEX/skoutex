@@ -12,7 +12,8 @@ import {
 import { ENABLE_MOCKS, mockToolResponses } from "~/config/mocks";
 
 // Use Besoccer credentials and endpoint
-const BESOCCER_API_KEY = process.env.BESOCCER_API_KEY!;
+// Hardcoded API key (for testing only); consider moving to an environment variable later.
+const BESOCCER_API_KEY = "9e3b9859a4b5564356282ae2041354dd";
 const BASE_URL = "https://api.besoccer.com/v1"; // adjust if needed
 
 function findStatValue(
