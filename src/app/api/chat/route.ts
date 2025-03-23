@@ -2,22 +2,12 @@
 import { type Message, convertToCoreMessages, streamText } from "ai";
 import { openai } from "@ai-sdk/openai";
 import { z } from "zod";
-import {
-  type PlayerDetails,
-  type PlayerStatistics,
-  type Season,
-  type StatDetail,
-  TYPE_IDS,
-} from "~/types/players";
+import { type PlayerDetails, type PlayerStatistics, type Season, type StatDetail, TYPE_IDS } from "~/types/players";
 import { ENABLE_MOCKS, mockToolResponses } from "~/config/mocks";
 
-// Use BeSoccer API key and base URL
-const BESOC_API_KEY = process.env.BESOC_API_KEY!;
-const BASE_URL = "https://api.besoccer.com/v1";
+const SPORTMONK_API_KEY = process.env.SPORTMONK_API_KEY!;
+const BASE_URL = "https://api.sportmonks.com/v3/football";
 
-/**
- * This helper function remains unchanged as it processes stat details.
- */
 function findStatValue(
   details: StatDetail[],
   typeId: number,
@@ -34,7 +24,7 @@ function findStatValue(
       return acc;
     }, {} as Record<string, number>);
   }
-
+  
   // If value is a number, store it as 'total'
   if (typeof stat.value === "number") {
     return { total: stat.value };
@@ -43,35 +33,38 @@ function findStatValue(
   return {};
 }
 
-function mapAllTypeIds(
-  stats: StatDetail[],
-): Record<number, Record<string, number | undefined>> {
+function mapAllTypeIds(stats: StatDetail[]): Record<number, Record<string, number | undefined>> {
   const result: Record<number, Record<string, number | undefined>> = {};
-  stats.forEach((stat) => {
+  
+  stats.forEach(stat => {
     result[stat.type_id] = findStatValue([stat], stat.type_id);
   });
+
   return result;
 }
 
-function aggregateHistoricalStats(
-  seasons: Array<{ details: StatDetail[] }>
-): Record<number, Record<string, number>> {
+function aggregateHistoricalStats(seasons: Array<{ details: StatDetail[] }>): Record<number, Record<string, number>> {
   const aggregatedStats: Record<number, Record<string, number>> = {};
 
   // First, group all stats by type_id
-  seasons.forEach((season) => {
-    season.details.forEach((stat) => {
+  seasons.forEach(season => {
+    season.details.forEach(stat => {
       if (!aggregatedStats[stat.type_id]) {
         aggregatedStats[stat.type_id] = {};
       }
+
       const statValues = findStatValue([stat], stat.type_id);
+      
       // Aggregate each property
       Object.entries(statValues).forEach(([key, value]) => {
         if (value !== undefined) {
+          // @ts-expect-error
           if (!aggregatedStats[stat.type_id][key]) {
+              // @ts-expect-error
             aggregatedStats[stat.type_id][key] = 0;
           }
-          aggregatedStats[stat.type_id][key]! += value;
+          // @ts-expect-error
+          aggregatedStats[stat.type_id][key] += value;
         }
       });
     });
@@ -79,12 +72,11 @@ function aggregateHistoricalStats(
 
   // Calculate averages for specific stats that should be averaged instead of summed
   const averageStats = [TYPE_IDS.RATING]; // Add more type IDs that should be averaged
-  averageStats.forEach((typeId) => {
+  averageStats.forEach(typeId => {
     if (aggregatedStats[typeId]) {
-      Object.keys(aggregatedStats[typeId]).forEach((key) => {
-        aggregatedStats[typeId][key] = Number(
-          (aggregatedStats[typeId][key]! / seasons.length).toFixed(2)
-        );
+      Object.keys(aggregatedStats[typeId]).forEach(key => {
+        // @ts-expect-error
+        aggregatedStats[typeId][key] = Number((aggregatedStats[typeId][key] / seasons.length).toFixed(2));
       });
     }
   });
@@ -92,25 +84,28 @@ function aggregateHistoricalStats(
   return aggregatedStats;
 }
 
-/**
- * Updated fetch function for BeSoccer.
- * For BeSoccer, we assume that the API key is passed as a query parameter.
- */
-async function fetchFromBesoccer<T>(endpoint: string): Promise<T> {
+async function fetchFromSportsmonk<T>(endpoint: string): Promise<T> {
   try {
-    const url = `${BASE_URL}${endpoint}`;
-    const response = await fetch(url);
+    const response = await fetch(`${BASE_URL}${endpoint}`, {
+      headers: {
+        Authorization: `${SPORTMONK_API_KEY}`,
+      },
+    });
+
     if (!response.ok) {
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       const errorData = await response.json().catch(() => ({}));
       throw new Error(
         `API request failed: ${response.status} ${response.statusText}. ${
-          (errorData as any).message ?? ""
-        }`
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+          errorData.message ?? ""
+        }`,
       );
     }
+
     return response.json() as Promise<T>;
   } catch (error) {
-    console.error(`Error fetching from Besoccer: ${endpoint}`, error);
+    console.error(`Error fetching from Sportmonk: ${endpoint}`, error);
     throw error;
   }
 }
@@ -124,18 +119,33 @@ export async function POST(req: Request) {
 
 When analyzing players, follow this structure:
 
-1. Physical Attributes Analysis:
-   Provide an in-depth assessment of the player’s physical attributes (pace, stamina, strength, agility, etc.). Compare to league averages.
-2. Technical Skills Analysis:
-   Evaluate passing, shooting, dribbling, ball control, and defensive skills with specific stats.
-3. General Performance Data:
-   Present detailed statistics from the current season (appearances, goals, assists, xG, etc.).
-4. Trends and Development Insights:
-   Compare current season data with previous seasons to identify trends.
-5. Transfer Potential and Recommendations:
-   Summarize the player’s contribution and potential, recommending suitable clubs or tactical systems.
-
-Always incorporate the latest data provided (such as BeSoccer statistics) and maintain a professional, unbiased tone.`,
+1. Physical Attributes Analysis
+Provide an in-depth assessment of the player’s physical attributes, including pace, stamina, strength, agility, aerial ability, and overall fitness.
+Use the most recent physical metrics available, comparing them to the league or positional averages to provide clear context.
+If applicable, analyze the impact of injuries or recovery patterns on the player’s physical performance.
+2. Technical Skills Analysis
+Analyze the player’s technical abilities, including passing accuracy, shooting technique, dribbling success rate, ball control, and defensive skills.
+Use specific statistics to highlight strengths and areas for improvement, and compare these metrics to the league or positional averages.
+Discuss how their technical skills contribute to their team’s tactics and overall gameplay.
+3. General Performance Data
+Present detailed statistics from the current season, including appearances, goals, assists, xG (expected goals), xA (expected assists), progressive passes, and defensive actions.
+Compare these figures to the league or positional averages, ensuring context and depth in the evaluation.
+Discuss the player’s role within their team’s tactical setup, referencing specific match scenarios or strategies when relevant.
+4. Trends and Development Insights
+Compare the player’s current season data with previous seasons to identify performance trends (e.g., improvements, consistency, or decline).
+Discuss possible reasons for these trends, such as tactical adjustments, positional changes, or the influence of injuries.
+Evaluate the player’s potential trajectory and areas for future development.
+5. Transfer Potential and Recommendations
+Provide a concise summary of the player’s overall contribution and transfer potential, backed by specific data.
+Recommend potential clubs or tactical systems where the player might excel, using detailed comparisons with existing squad members or positional needs.
+Example: “Given their crossing accuracy of X% and progressive runs per 90 minutes, this player would be an ideal fit for [specific club], whose current full-backs average Y% and Z respectively.”
+Highlight whether the player is a suitable candidate for development or an immediate starter based on their metrics.
+Guidelines for Accuracy and Depth:
+Latest Data Only: Prioritize statistics from the current season; if unavailable, explain clearly and use alternative methods for evaluation.
+Contextual Comparisons: Always compare the player’s metrics to league or positional averages to add depth and clarity.
+Detailed and Specific: Avoid vague statements; use precise statistics and examples to support all insights.
+Thorough Research: Never include placeholders or incomplete information (e.g., “unknown team”). Dig deeper to provide the most accurate and detailed analysis possible.
+Professional Language: Avoid repetitive use of the player’s name; maintain variety and flow in your writing.`,
     messages: convertToCoreMessages(messages),
     maxSteps: 6,
     tools: {
@@ -148,15 +158,17 @@ Always incorporate the latest data provided (such as BeSoccer statistics) and ma
           if (ENABLE_MOCKS) {
             return mockToolResponses.searchPlayer(name);
           }
+          
           try {
-            const result = await fetchFromBesoccer<{
+            const result = await fetchFromSportsmonk<{
               data: Array<{
                 id: number;
                 display_name: string;
                 team: { name: string } | null;
                 position_id: number;
               }>;
-            }>(`/search/players?name=${encodeURIComponent(name)}&token=${BESOC_API_KEY}`);
+            }>(`/players/search/${name}`);
+
             if (!result.data.length) {
               return "No players found with that name. Please try with a different name or spelling.";
             }
@@ -167,15 +179,12 @@ Always incorporate the latest data provided (such as BeSoccer statistics) and ma
               position: player.position_id,
             }));
           } catch (error) {
-            return `Error searching for player: ${
-              error instanceof Error ? error.message : "Unknown error"
-            }. Please try again later.`;
+            return `Error searching for player: ${error instanceof Error ? error.message : "Unknown error"}. Please try again later.`;
           }
         },
       },
       analyzePlayer: {
-        description:
-          "Get detailed analysis of a player's current season with previous season comparison.",
+        description: "Get detailed analysis of a player's current season with previous season comparison.",
         parameters: z.object({
           playerId: z.number().describe("The ID of the player to analyze"),
         }),
@@ -183,20 +192,27 @@ Always incorporate the latest data provided (such as BeSoccer statistics) and ma
           if (ENABLE_MOCKS) {
             return mockToolResponses.analyzePlayer(playerId);
           }
+
           try {
             const [playerDetails, playerStats] = await Promise.all([
-              fetchFromBesoccer<PlayerDetails>(`/player?id=${playerId}&token=${BESOC_API_KEY}`),
-              fetchFromBesoccer<PlayerStatistics>(
-                `/statistics/seasons/players/${playerId}?token=${BESOC_API_KEY}`
+              fetchFromSportsmonk<PlayerDetails>(`/players/${playerId}`),
+              fetchFromSportsmonk<PlayerStatistics>(
+                `/statistics/seasons/players/${playerId}`
               ),
             ]);
+
             const player = playerDetails.data;
+            
             // Get current and previous season stats
             const currentSeasonStats = playerStats.data[0];
             const previousSeasonStats = playerStats.data[1];
+            
             if (!currentSeasonStats) {
-              return { error: "No current season statistics available for this player." };
+              return {
+                error: "No current season statistics available for this player."
+              };
             }
+
             const response = {
               playerInfo: {
                 name: player.display_name,
@@ -213,25 +229,21 @@ Always incorporate the latest data provided (such as BeSoccer statistics) and ma
                 season_id: currentSeasonStats.season_id,
                 statistics: mapAllTypeIds(currentSeasonStats.details),
               },
-              previousSeason: previousSeasonStats
-                ? {
-                    season_id: previousSeasonStats.season_id,
-                    statistics: mapAllTypeIds(previousSeasonStats.details),
-                  }
-                : null,
+              previousSeason: previousSeasonStats ? {
+                season_id: previousSeasonStats.season_id,
+                statistics: mapAllTypeIds(previousSeasonStats.details),
+              } : null,
               typeIds: TYPE_IDS,
             };
+
             return response;
           } catch (error) {
-            return `Error analyzing player: ${
-              error instanceof Error ? error.message : "Unknown error"
-            }. Please try again later.`;
+            return `Error analyzing player: ${error instanceof Error ? error.message : "Unknown error"}. Please try again later.`;
           }
         },
       },
       analyzeHistoricalStats: {
-        description:
-          "Get aggregated historical statistics for a player across all seasons",
+        description: "Get aggregated historical statistics for a player across all seasons",
         parameters: z.object({
           playerId: z.number().describe("The ID of the player to analyze"),
         }),
@@ -240,16 +252,20 @@ Always incorporate the latest data provided (such as BeSoccer statistics) and ma
             const mockResponse = mockToolResponses.analyzeHistoricalStats(playerId);
             return mockResponse;
           }
+
           try {
             const [playerDetails, playerStats] = await Promise.all([
-              fetchFromBesoccer<PlayerDetails>(`/player?id=${playerId}&token=${BESOC_API_KEY}`),
-              fetchFromBesoccer<PlayerStatistics>(
-                `/statistics/seasons/players/${playerId}?token=${BESOC_API_KEY}`
+              fetchFromSportsmonk<PlayerDetails>(`/players/${playerId}`),
+              fetchFromSportsmonk<PlayerStatistics>(
+                `/statistics/seasons/players/${playerId}`
               ),
             ]);
+
             const player = playerDetails.data;
+            
             // Aggregate all seasons' data
             const historicalStats = aggregateHistoricalStats(playerStats.data);
+            
             const response = {
               playerInfo: {
                 name: player.display_name,
@@ -263,15 +279,14 @@ Always incorporate the latest data provided (such as BeSoccer statistics) and ma
                 imagePath: player.image_path,
               },
               totalSeasons: playerStats.data.length,
-              seasonIds: playerStats.data.map((season) => season.season_id),
+              seasonIds: playerStats.data.map(season => season.season_id),
               statistics: historicalStats,
               typeIds: TYPE_IDS,
             };
+
             return response;
           } catch (error) {
-            return `Error analyzing player: ${
-              error instanceof Error ? error.message : "Unknown error"
-            }. Please try again later.`;
+            return `Error analyzing player: ${error instanceof Error ? error.message : "Unknown error"}. Please try again later.`;
           }
         },
       },
@@ -282,19 +297,16 @@ Always incorporate the latest data provided (such as BeSoccer statistics) and ma
           chartType: z.enum(["radar", "bar"]).describe("Type of chart to generate"),
           statCategories: z.array(z.number()).describe("Array of TYPE_IDS to compare"),
         }),
-        execute: async ({
-          playerIds,
-          chartType,
-          statCategories,
-        }: {
-          playerIds: number[];
-          chartType: "radar" | "bar";
-          statCategories: number[];
+        execute: async ({ playerIds, chartType, statCategories }: { 
+          playerIds: number[]; 
+          chartType: "radar" | "bar"; 
+          statCategories: number[]; 
         }) => {
           if (ENABLE_MOCKS) {
             const mockResponse = mockToolResponses.compareStats({ playerIds, chartType });
             return mockResponse;
           }
+
           try {
             type PlayerData = {
               details: PlayerDetails["data"];
@@ -304,21 +316,21 @@ Always incorporate the latest data provided (such as BeSoccer statistics) and ma
             const playersData: PlayerData[] = await Promise.all(
               playerIds.map(async (id: number) => {
                 const [details, stats] = await Promise.all([
-                  fetchFromBesoccer<PlayerDetails>(`/player?id=${id}&token=${BESOC_API_KEY}`),
-                  fetchFromBesoccer<PlayerStatistics>(`/statistics/seasons/players/${id}?token=${BESOC_API_KEY}`),
+                  fetchFromSportsmonk<PlayerDetails>(`/players/${id}`),
+                  fetchFromSportsmonk<PlayerStatistics>(`/statistics/seasons/players/${id}`),
                 ]);
+                
                 if (!stats.data[0]) {
                   throw new Error(`No statistics found for player ${details.data.display_name}`);
                 }
+                
                 return { details: details.data, stats: stats.data[0] };
               })
             );
 
             const chartData = statCategories.map((typeId: number) => {
               const dataPoint: { label: string; [key: string]: string | number } = {
-                label:
-                  Object.entries(TYPE_IDS).find(([_, id]) => id === typeId)?.[0]?.toLowerCase() ||
-                  String(typeId),
+                label: Object.entries(TYPE_IDS).find(([_, id]) => id === typeId)?.[0]?.toLowerCase() ?? String(typeId),
               };
 
               playersData.forEach((player: PlayerData) => {
@@ -339,9 +351,7 @@ Always incorporate the latest data provided (such as BeSoccer statistics) and ma
               },
             };
           } catch (error) {
-            return `Error comparing players: ${
-              error instanceof Error ? error.message : "Unknown error"
-            }. Please try again later.`;
+            return `Error comparing players: ${error instanceof Error ? error.message : "Unknown error"}. Please try again later.`;
           }
         },
       },
