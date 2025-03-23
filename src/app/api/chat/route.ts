@@ -2,12 +2,22 @@
 import { type Message, convertToCoreMessages, streamText } from "ai";
 import { openai } from "@ai-sdk/openai";
 import { z } from "zod";
-import { type PlayerDetails, type PlayerStatistics, type Season, type StatDetail, TYPE_IDS } from "~/types/players";
+import {
+  type PlayerDetails,
+  type PlayerStatistics,
+  type Season,
+  type StatDetail,
+  TYPE_IDS,
+} from "~/types/players";
 import { ENABLE_MOCKS, mockToolResponses } from "~/config/mocks";
 
-const SPORTMONK_API_KEY = process.env.SPORTMONK_API_KEY!;
-const BASE_URL = "https://api.sportmonks.com/v3/football";
+// Use BeSoccer API key and base URL
+const BESOC_API_KEY = process.env.BESOC_API_KEY!;
+const BASE_URL = "https://api.besoccer.com/v1";
 
+/**
+ * This helper function remains unchanged as it processes stat details.
+ */
 function findStatValue(
   details: StatDetail[],
   typeId: number,
@@ -24,7 +34,7 @@ function findStatValue(
       return acc;
     }, {} as Record<string, number>);
   }
-  
+
   // If value is a number, store it as 'total'
   if (typeof stat.value === "number") {
     return { total: stat.value };
@@ -33,38 +43,35 @@ function findStatValue(
   return {};
 }
 
-function mapAllTypeIds(stats: StatDetail[]): Record<number, Record<string, number | undefined>> {
+function mapAllTypeIds(
+  stats: StatDetail[],
+): Record<number, Record<string, number | undefined>> {
   const result: Record<number, Record<string, number | undefined>> = {};
-  
-  stats.forEach(stat => {
+  stats.forEach((stat) => {
     result[stat.type_id] = findStatValue([stat], stat.type_id);
   });
-
   return result;
 }
 
-function aggregateHistoricalStats(seasons: Array<{ details: StatDetail[] }>): Record<number, Record<string, number>> {
+function aggregateHistoricalStats(
+  seasons: Array<{ details: StatDetail[] }>
+): Record<number, Record<string, number>> {
   const aggregatedStats: Record<number, Record<string, number>> = {};
 
   // First, group all stats by type_id
-  seasons.forEach(season => {
-    season.details.forEach(stat => {
+  seasons.forEach((season) => {
+    season.details.forEach((stat) => {
       if (!aggregatedStats[stat.type_id]) {
         aggregatedStats[stat.type_id] = {};
       }
-
       const statValues = findStatValue([stat], stat.type_id);
-      
       // Aggregate each property
       Object.entries(statValues).forEach(([key, value]) => {
         if (value !== undefined) {
-          // @ts-expect-error
           if (!aggregatedStats[stat.type_id][key]) {
-              // @ts-expect-error
             aggregatedStats[stat.type_id][key] = 0;
           }
-          // @ts-expect-error
-          aggregatedStats[stat.type_id][key] += value;
+          aggregatedStats[stat.type_id][key]! += value;
         }
       });
     });
@@ -72,11 +79,12 @@ function aggregateHistoricalStats(seasons: Array<{ details: StatDetail[] }>): Re
 
   // Calculate averages for specific stats that should be averaged instead of summed
   const averageStats = [TYPE_IDS.RATING]; // Add more type IDs that should be averaged
-  averageStats.forEach(typeId => {
+  averageStats.forEach((typeId) => {
     if (aggregatedStats[typeId]) {
-      Object.keys(aggregatedStats[typeId]).forEach(key => {
-        // @ts-expect-error
-        aggregatedStats[typeId][key] = Number((aggregatedStats[typeId][key] / seasons.length).toFixed(2));
+      Object.keys(aggregatedStats[typeId]).forEach((key) => {
+        aggregatedStats[typeId][key] = Number(
+          (aggregatedStats[typeId][key]! / seasons.length).toFixed(2)
+        );
       });
     }
   });
@@ -84,28 +92,25 @@ function aggregateHistoricalStats(seasons: Array<{ details: StatDetail[] }>): Re
   return aggregatedStats;
 }
 
-async function fetchFromSportsmonk<T>(endpoint: string): Promise<T> {
+/**
+ * Updated fetch function for BeSoccer.
+ * For BeSoccer, we assume that the API key is passed as a query parameter.
+ */
+async function fetchFromBesoccer<T>(endpoint: string): Promise<T> {
   try {
-    const response = await fetch(`${BASE_URL}${endpoint}`, {
-      headers: {
-        Authorization: `${SPORTMONK_API_KEY}`,
-      },
-    });
-
+    const url = `${BASE_URL}${endpoint}`;
+    const response = await fetch(url);
     if (!response.ok) {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       const errorData = await response.json().catch(() => ({}));
       throw new Error(
         `API request failed: ${response.status} ${response.statusText}. ${
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-          errorData.message ?? ""
-        }`,
+          (errorData as any).message ?? ""
+        }`
       );
     }
-
     return response.json() as Promise<T>;
   } catch (error) {
-    console.error(`Error fetching from Sportmonk: ${endpoint}`, error);
+    console.error(`Error fetching from Besoccer: ${endpoint}`, error);
     throw error;
   }
 }
@@ -157,17 +162,15 @@ Professional Language: Avoid repetitive use of the player’s name; maintain var
           if (ENABLE_MOCKS) {
             return mockToolResponses.searchPlayer(name);
           }
-          
           try {
-            const result = await fetchFromSportsmonk<{
+            const result = await fetchFromBesoccer<{
               data: Array<{
                 id: number;
                 display_name: string;
                 team: { name: string } | null;
                 position_id: number;
               }>;
-            }>(`/players/search/${name}`);
-
+            }>(`/search/players?name=${encodeURIComponent(name)}&token=${BESOC_API_KEY}`);
             if (!result.data.length) {
               return "No players found with that name. Please try with a different name or spelling.";
             }
@@ -178,12 +181,15 @@ Professional Language: Avoid repetitive use of the player’s name; maintain var
               position: player.position_id,
             }));
           } catch (error) {
-            return `Error searching for player: ${error instanceof Error ? error.message : "Unknown error"}. Please try again later.`;
+            return `Error searching for player: ${
+              error instanceof Error ? error.message : "Unknown error"
+            }. Please try again later.`;
           }
         },
       },
       analyzePlayer: {
-        description: "Get detailed analysis of a player's current season with previous season comparison.",
+        description:
+          "Get detailed analysis of a player's current season with previous season comparison.",
         parameters: z.object({
           playerId: z.number().describe("The ID of the player to analyze"),
         }),
@@ -191,27 +197,20 @@ Professional Language: Avoid repetitive use of the player’s name; maintain var
           if (ENABLE_MOCKS) {
             return mockToolResponses.analyzePlayer(playerId);
           }
-
           try {
             const [playerDetails, playerStats] = await Promise.all([
-              fetchFromSportsmonk<PlayerDetails>(`/players/${playerId}`),
-              fetchFromSportsmonk<PlayerStatistics>(
-                `/statistics/seasons/players/${playerId}`
+              fetchFromBesoccer<PlayerDetails>(`/player?id=${playerId}&token=${BESOC_API_KEY}`),
+              fetchFromBesoccer<PlayerStatistics>(
+                `/statistics/seasons/players/${playerId}?token=${BESOC_API_KEY}`
               ),
             ]);
-
             const player = playerDetails.data;
-            
             // Get current and previous season stats
             const currentSeasonStats = playerStats.data[0];
             const previousSeasonStats = playerStats.data[1];
-            
             if (!currentSeasonStats) {
-              return {
-                error: "No current season statistics available for this player."
-              };
+              return { error: "No current season statistics available for this player." };
             }
-
             const response = {
               playerInfo: {
                 name: player.display_name,
@@ -228,21 +227,25 @@ Professional Language: Avoid repetitive use of the player’s name; maintain var
                 season_id: currentSeasonStats.season_id,
                 statistics: mapAllTypeIds(currentSeasonStats.details),
               },
-              previousSeason: previousSeasonStats ? {
-                season_id: previousSeasonStats.season_id,
-                statistics: mapAllTypeIds(previousSeasonStats.details),
-              } : null,
+              previousSeason: previousSeasonStats
+                ? {
+                    season_id: previousSeasonStats.season_id,
+                    statistics: mapAllTypeIds(previousSeasonStats.details),
+                  }
+                : null,
               typeIds: TYPE_IDS,
             };
-
             return response;
           } catch (error) {
-            return `Error analyzing player: ${error instanceof Error ? error.message : "Unknown error"}. Please try again later.`;
+            return `Error analyzing player: ${
+              error instanceof Error ? error.message : "Unknown error"
+            }. Please try again later.`;
           }
         },
       },
       analyzeHistoricalStats: {
-        description: "Get aggregated historical statistics for a player across all seasons",
+        description:
+          "Get aggregated historical statistics for a player across all seasons",
         parameters: z.object({
           playerId: z.number().describe("The ID of the player to analyze"),
         }),
@@ -251,20 +254,16 @@ Professional Language: Avoid repetitive use of the player’s name; maintain var
             const mockResponse = mockToolResponses.analyzeHistoricalStats(playerId);
             return mockResponse;
           }
-
           try {
             const [playerDetails, playerStats] = await Promise.all([
-              fetchFromSportsmonk<PlayerDetails>(`/players/${playerId}`),
-              fetchFromSportsmonk<PlayerStatistics>(
-                `/statistics/seasons/players/${playerId}`
+              fetchFromBesoccer<PlayerDetails>(`/player?id=${playerId}&token=${BESOC_API_KEY}`),
+              fetchFromBesoccer<PlayerStatistics>(
+                `/statistics/seasons/players/${playerId}?token=${BESOC_API_KEY}`
               ),
             ]);
-
             const player = playerDetails.data;
-            
             // Aggregate all seasons' data
             const historicalStats = aggregateHistoricalStats(playerStats.data);
-            
             const response = {
               playerInfo: {
                 name: player.display_name,
@@ -278,14 +277,15 @@ Professional Language: Avoid repetitive use of the player’s name; maintain var
                 imagePath: player.image_path,
               },
               totalSeasons: playerStats.data.length,
-              seasonIds: playerStats.data.map(season => season.season_id),
+              seasonIds: playerStats.data.map((season) => season.season_id),
               statistics: historicalStats,
               typeIds: TYPE_IDS,
             };
-
             return response;
           } catch (error) {
-            return `Error analyzing player: ${error instanceof Error ? error.message : "Unknown error"}. Please try again later.`;
+            return `Error analyzing player: ${
+              error instanceof Error ? error.message : "Unknown error"
+            }. Please try again later.`;
           }
         },
       },
@@ -296,16 +296,19 @@ Professional Language: Avoid repetitive use of the player’s name; maintain var
           chartType: z.enum(["radar", "bar"]).describe("Type of chart to generate"),
           statCategories: z.array(z.number()).describe("Array of TYPE_IDS to compare"),
         }),
-        execute: async ({ playerIds, chartType, statCategories }: { 
-          playerIds: number[]; 
-          chartType: "radar" | "bar"; 
-          statCategories: number[]; 
+        execute: async ({
+          playerIds,
+          chartType,
+          statCategories,
+        }: {
+          playerIds: number[];
+          chartType: "radar" | "bar";
+          statCategories: number[];
         }) => {
           if (ENABLE_MOCKS) {
             const mockResponse = mockToolResponses.compareStats({ playerIds, chartType });
             return mockResponse;
           }
-
           try {
             type PlayerData = {
               details: PlayerDetails["data"];
@@ -315,21 +318,21 @@ Professional Language: Avoid repetitive use of the player’s name; maintain var
             const playersData: PlayerData[] = await Promise.all(
               playerIds.map(async (id: number) => {
                 const [details, stats] = await Promise.all([
-                  fetchFromSportsmonk<PlayerDetails>(`/players/${id}`),
-                  fetchFromSportsmonk<PlayerStatistics>(`/statistics/seasons/players/${id}`),
+                  fetchFromBesoccer<PlayerDetails>(`/player?id=${id}&token=${BESOC_API_KEY}`),
+                  fetchFromBesoccer<PlayerStatistics>(`/statistics/seasons/players/${id}?token=${BESOC_API_KEY}`),
                 ]);
-                
                 if (!stats.data[0]) {
                   throw new Error(`No statistics found for player ${details.data.display_name}`);
                 }
-                
                 return { details: details.data, stats: stats.data[0] };
               })
             );
 
             const chartData = statCategories.map((typeId: number) => {
               const dataPoint: { label: string; [key: string]: string | number } = {
-                label: Object.entries(TYPE_IDS).find(([_, id]) => id === typeId)?.[0]?.toLowerCase() ?? String(typeId),
+                label:
+                  Object.entries(TYPE_IDS).find(([_, id]) => id === typeId)?.[0]?.toLowerCase() ||
+                  String(typeId),
               };
 
               playersData.forEach((player: PlayerData) => {
@@ -350,7 +353,9 @@ Professional Language: Avoid repetitive use of the player’s name; maintain var
               },
             };
           } catch (error) {
-            return `Error comparing players: ${error instanceof Error ? error.message : "Unknown error"}. Please try again later.`;
+            return `Error comparing players: ${
+              error instanceof Error ? error.message : "Unknown error"
+            }. Please try again later.`;
           }
         },
       },
