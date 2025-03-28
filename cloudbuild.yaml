@@ -1,15 +1,13 @@
 steps:
   - name: 'gcr.io/cloud-builders/pnpm'
-    entrypoint: 'pnpm'
-    args: ['install']
-
-  - name: 'gcr.io/cloud-builders/pnpm'
-    entrypoint: 'pnpm'
-    args: ['build']
-
-  - name: 'gcr.io/cloud-builders/pnpm'
-    entrypoint: 'pnpm'
-    args: ['start']
+    entrypoint: 'bash'
+    args:
+      - -c
+      - |
+        echo "BESOCCER_API_KEY=$_BESOCCER_API_KEY" > .env.production
+        pnpm install
+        pnpm build
+        pnpm start
 
 options:
   logging: CLOUD_LOGGING_ONLY
