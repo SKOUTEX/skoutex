@@ -86,7 +86,6 @@ Guidelines:
               console.log("BeSoccer search response:", result);
 
               if (!result.data?.length) {
-                // fallback to suggest top strikers from LaLiga
                 const fallback = await fetchFromBeSoccer<any>("/competition/players", {
                   id_competition: "302",
                   season: "2024",
@@ -94,7 +93,12 @@ Guidelines:
                 });
 
                 const suggestions = fallback.data?.slice(0, 5).map((p: any) => p.name);
-                return `No player found named "${name}" in La Liga. Here are a few current La Liga strikers you can choose from: ${suggestions?.join(", ")}`;
+
+                if (suggestions?.length) {
+                  return `I couldn’t retrieve data for "${name}". Would you like me to analyse one of these LaLiga strikers instead? ${suggestions.join(", ")}`;
+                } else {
+                  return `No players found with that name in LaLiga. Please double-check the spelling or try another player.`;
+                }
               }
 
               const player = result.data[0];
@@ -109,10 +113,134 @@ Guidelines:
             }
           },
         },
-        analyzePlayer: { ... },
-        analyzeHistoricalStats: { ... },
-        compareStats: { ... },
-        findPlayersByFilters: { ... }
+        analyzePlayer: {
+          description: "Analyze a player's current season",
+          parameters: z.object({
+            playerId: z.number(),
+          }),
+          execute: async ({ playerId }) => {
+            if (ENABLE_MOCKS) return mockToolResponses.analyzePlayer(playerId);
+            try {
+              const result = await fetchFromBeSoccer<any>("/player/info", { id: playerId.toString() });
+              if (!result.data) return { error: "No data found for player." };
+              return {
+                playerInfo: result.data,
+                typeIds: TYPE_IDS,
+              };
+            } catch (error) {
+              return "An error occurred while analyzing the player.";
+            }
+          },
+        },
+        analyzeHistoricalStats: {
+          description: "Get aggregated historical statistics for a player across all seasons",
+          parameters: z.object({
+            playerId: z.number(),
+          }),
+          execute: async ({ playerId }) => {
+            try {
+              const result = await fetchFromBeSoccer<any>("/player/stats/all", { id: playerId.toString() });
+              if (!result.data || !Array.isArray(result.data)) {
+                return { error: "No historical stats found for player." };
+              }
+              return {
+                playerId,
+                totalSeasons: result.data.length,
+                seasons: result.data.map((season: any) => ({
+                  seasonId: season.season_id,
+                  goals: season.goals,
+                  assists: season.assists,
+                  minutes: season.minutes,
+                  yellowCards: season.yellow_cards,
+                  redCards: season.red_cards,
+                })),
+              };
+            } catch (error) {
+              return "An error occurred while retrieving historical stats.";
+            }
+          },
+        },
+        compareStats: {
+          description: "Compare statistics between two or more players using charts",
+          parameters: z.object({
+            playerIds: z.array(z.number()),
+            chartType: z.enum(["radar", "bar"]),
+            statCategories: z.array(z.string()),
+          }),
+          execute: async ({ playerIds, chartType, statCategories }) => {
+            try {
+              const playersData = await Promise.all(
+                playerIds.map(async (id) => {
+                  const stats = await fetchFromBeSoccer<any>("/player/stats/season", { id: id.toString() });
+                  const info = await fetchFromBeSoccer<any>("/player/info", { id: id.toString() });
+                  return { name: info.data.name, stats: stats.data };
+                })
+              );
+
+              const chartData = statCategories.map((category) => {
+                const row: Record<string, string | number> = { label: category };
+                playersData.forEach((player) => {
+                  row[player.name] = player.stats?.[category] ?? 0;
+                });
+                return row;
+              });
+
+              return {
+                chartData: {
+                  title: "Player Statistics Comparison",
+                  description: "Comparing current season statistics",
+                  data: chartData,
+                  players: playersData.map((p) => p.name),
+                  chartType,
+                },
+              };
+            } catch (error) {
+              return "An error occurred while comparing players.";
+            }
+          },
+        },
+        findPlayersByFilters: {
+          description: "Find players by age, position, and competition (e.g., 21-year-old strikers in La Liga)",
+          parameters: z.object({
+            age: z.number(),
+            positionId: z.string(),
+            competitionId: z.string(),
+            season: z.string()
+          }),
+          execute: async ({ age, positionId, competitionId, season }) => {
+            try {
+              const result = await fetchFromBeSoccer<any>("/competition/players", {
+                id_competition: competitionId,
+                season,
+                pos: positionId
+              });
+
+              if (!result.data || !Array.isArray(result.data)) {
+                return "No players found for the specified filters.";
+              }
+
+              const currentYear = new Date().getFullYear();
+              const targetBirthYear = currentYear - age;
+
+              const filtered = result.data.filter((p: any) => {
+                const birthYear = new Date(p.date_birth).getFullYear();
+                return birthYear === targetBirthYear;
+              });
+
+              if (!filtered.length) return "No players matched the age and position in this league.";
+
+              return filtered.slice(0, 5).map((p: any) => ({
+                id: parseInt(p.id),
+                name: p.name,
+                birthdate: p.date_birth,
+                team: p.team_name,
+                position: p.position
+              }));
+            } catch (err) {
+              return "An error occurred while filtering players.";
+            }
+          }
+        }
       },
     });
 
