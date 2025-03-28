@@ -8,3 +8,6 @@ steps:
         pnpm install
         pnpm build
         pnpm start
+
+options:
+  defaultLogsBucketBehavior: REGIONAL_USER_OWNED_BUCKET
