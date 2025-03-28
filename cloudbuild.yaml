@@ -8,6 +8,3 @@ steps:
         pnpm install
         pnpm build
         pnpm start
-
-options:
-logging: CLOUD_LOGGING_ONLY
