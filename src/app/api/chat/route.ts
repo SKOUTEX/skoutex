@@ -30,6 +30,10 @@ async function fetchFromBeSoccer<T>(endpoint: string, params: Record<string, str
   }
 }
 
+function normalizeName(name: string): string {
+  return name.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
+
 export async function POST(req: Request) {
   const { messages } = (await req.json()) as { messages: Message[] };
 
@@ -73,11 +77,15 @@ Guidelines:
         execute: async ({ name }) => {
           if (ENABLE_MOCKS) return mockToolResponses.searchPlayer(name);
 
+          const cleanName = normalizeName(name);
           try {
-            const result = await fetchFromBeSoccer<any>("/player/search", { name });
+            const result = await fetchFromBeSoccer<any>("/player/search", { name: cleanName });
+            console.log("BeSoccer search response:", result);
+
             if (!result.data?.length) {
-              return "No players found with that name.";
+              return `No players found with the name "${name}". Try full names or adjust spelling (e.g. "Lewandowski Robert").`;
             }
+
             const player = result.data[0];
             return [{
               id: parseInt(player.id),
