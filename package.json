@@ -7,7 +7,7 @@
     "build": "next build",
     "dev": "next dev",
     "lint": "next lint",
-    "start": "pnpm dev --turbo"
+    "start": "next start"
   },
   "dependencies": {
     "@ai-sdk/openai": "^0.0.68",
