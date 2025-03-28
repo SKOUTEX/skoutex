@@ -1,0 +1,15 @@
+steps:
+  - name: 'gcr.io/cloud-builders/pnpm'
+    entrypoint: 'pnpm'
+    args: ['install']
+
+  - name: 'gcr.io/cloud-builders/pnpm'
+    entrypoint: 'pnpm'
+    args: ['build']
+
+  - name: 'gcr.io/cloud-builders/pnpm'
+    entrypoint: 'pnpm'
+    args: ['start']
+
+options:
+  logging: CLOUD_LOGGING_ONLY
